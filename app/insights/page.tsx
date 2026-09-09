@@ -16,6 +16,7 @@ import {
   loadStats,
   type StatsMap,
 } from "@/lib/practiceStats";
+import { APP_SETTINGS_EVENT, loadAppSettings } from "@/lib/appSettings";
 
 type Tab = "overview" | "weak";
 
@@ -51,6 +52,16 @@ export default function InsightsPage() {
   const [questions, setQuestions] = useState<DrivingQuestion[] | null>(null);
   const [stats, setStats] = useState<StatsMap>({});
   const [tab, setTab] = useState<Tab>("overview");
+
+  useEffect(() => {
+    setLang(loadAppSettings().lang);
+    function onChange(e: Event) {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.lang) setLang(detail.lang);
+    }
+    window.addEventListener(APP_SETTINGS_EVENT, onChange);
+    return () => window.removeEventListener(APP_SETTINGS_EVENT, onChange);
+  }, []);
 
   useEffect(() => {
     fetch(`/api/driving-questions?lang=${lang}`)
@@ -124,14 +135,6 @@ export default function InsightsPage() {
     <main className="max-w-2xl mx-auto w-full px-4 py-4 flex-1">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold glow-text">Insights</h1>
-        <select
-          className="text-xs border border-border rounded-full px-2 py-1 bg-background"
-          value={lang}
-          onChange={(e) => setLang(e.target.value as Language)}
-        >
-          <option value="de">German</option>
-          <option value="en">English</option>
-        </select>
       </div>
 
       <div className="grid grid-cols-2 gap-1 bg-secondary rounded-full p-1 mb-6 text-sm">

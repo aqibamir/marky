@@ -139,3 +139,34 @@ export function isNumericAnswerQuestion(q: RawDrivingQuestion): boolean {
   const numericCount = q.options.filter((o) => looksNumeric(o.text)).length;
   return numericCount >= Math.max(2, q.options.length - 1);
 }
+
+// The official Fragenkatalog is split into "Thema 1.x" (Grundstoff - basic
+// knowledge asked in every license class's exam) and "Thema 2.x"
+// (Zusatzstoff - only asked for specific classes). Within Zusatzstoff, only
+// some of the theme numbers apply to a given class; per driving-school
+// references for Klasse B (car), that's themes 2.1/2.2/2.5/2.6/2.7 - not
+// 2.4 (traffic signs) or 2.8 (professional-driver fitness), which belong to
+// other classes. We only have a verified mapping for Class B so far.
+export type LicenseClass = "all" | "B";
+
+function themeMajorMinor(themeNumber: string): [number, number] | null {
+  const m = themeNumber.match(/(\d+)\.(\d+)\./);
+  if (!m) return null;
+  return [parseInt(m[1], 10), parseInt(m[2], 10)];
+}
+
+export function isGrundstoff(q: RawDrivingQuestion): boolean {
+  return themeMajorMinor(q.theme_number)?.[0] === 1;
+}
+
+const CLASS_B_ZUSATZSTOFF_MINORS = new Set([1, 2, 5, 6, 7]);
+
+export function appliesToLicenseClass(q: RawDrivingQuestion, cls: LicenseClass): boolean {
+  if (cls === "all") return true;
+  const mm = themeMajorMinor(q.theme_number);
+  if (!mm) return true;
+  const [major, minor] = mm;
+  if (major === 1) return true; // Grundstoff applies to every class
+  if (cls === "B") return major === 2 && CLASS_B_ZUSATZSTOFF_MINORS.has(minor);
+  return true;
+}

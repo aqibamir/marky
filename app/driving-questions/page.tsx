@@ -1,11 +1,13 @@
 import Link from "next/link";
 import QuestionMedia from "@/components/QuestionMedia";
 import {
+  appliesToLicenseClass,
   getAllQuestions,
   groupByPoints,
   sortByPoints,
   type DrivingQuestion,
   type Language,
+  type LicenseClass,
   type QuestionOption,
 } from "@/lib/drivingQuestions";
 
@@ -14,7 +16,7 @@ export const metadata = {
 };
 
 interface PageProps {
-  searchParams: { order?: string; lang?: string };
+  searchParams: { order?: string; lang?: string; class?: string };
 }
 
 function pointsBadgeClass(points: number) {
@@ -33,13 +35,17 @@ function pointsBadgeClass(points: number) {
 export default async function DrivingQuestionsPage({ searchParams }: PageProps) {
   const order = searchParams.order === "asc" ? "asc" : "desc";
   const lang: Language = searchParams.lang === "en" ? "en" : "de";
+  const licenseClass: LicenseClass = searchParams.class === "B" ? "B" : "all";
 
   const all = await getAllQuestions(lang);
-  const sorted = sortByPoints(all, order);
+  const filtered =
+    licenseClass === "all" ? all : all.filter((q) => appliesToLicenseClass(q, licenseClass));
+  const sorted = sortByPoints(filtered, order);
   const grouped = groupByPoints(sorted);
 
   const otherOrder = order === "asc" ? "desc" : "asc";
   const otherLang = lang === "de" ? "en" : "de";
+  const otherClass: LicenseClass = licenseClass === "all" ? "B" : "all";
 
   return (
     <main className="max-w-3xl mx-auto w-full px-4 py-6">
@@ -55,7 +61,8 @@ export default async function DrivingQuestionsPage({ searchParams }: PageProps) 
         </Link>
       </div>
       <p className="text-sm text-muted-foreground mb-4">
-        {all.length} questions, sourced live from{" "}
+        {filtered.length} of {all.length} questions
+        {licenseClass === "B" && " (Grundstoff + Class B Zusatzstoff)"}, sourced live from{" "}
         <a
           className="underline"
           href="https://github.com/yowmamasita/driving-theory"
@@ -71,15 +78,21 @@ export default async function DrivingQuestionsPage({ searchParams }: PageProps) 
       <div className="flex flex-wrap gap-2 mb-6 text-sm">
         <Link
           className="border border-border rounded-full px-3 py-1.5 hover:bg-secondary"
-          href={`/driving-questions?order=${otherOrder}&lang=${lang}`}
+          href={`/driving-questions?order=${otherOrder}&lang=${lang}&class=${licenseClass}`}
         >
           Sort: {order === "desc" ? "highest → lowest" : "lowest → highest"}
         </Link>
         <Link
           className="border border-border rounded-full px-3 py-1.5 hover:bg-secondary"
-          href={`/driving-questions?order=${order}&lang=${otherLang}`}
+          href={`/driving-questions?order=${order}&lang=${otherLang}&class=${licenseClass}`}
         >
           {lang.toUpperCase()} → {otherLang.toUpperCase()}
+        </Link>
+        <Link
+          className="border border-border rounded-full px-3 py-1.5 hover:bg-secondary"
+          href={`/driving-questions?order=${order}&lang=${lang}&class=${otherClass}`}
+        >
+          {licenseClass === "all" ? "All classes" : "Class B"} → {otherClass === "all" ? "All classes" : "Class B"}
         </Link>
       </div>
 

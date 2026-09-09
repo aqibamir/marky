@@ -6,12 +6,14 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import QuestionMedia from "@/components/QuestionMedia";
 import {
+  appliesToLicenseClass,
   isNumericAnswerQuestion,
   questionMediaType,
   themeEmoji,
   themeLabel,
   type DrivingQuestion,
   type Language,
+  type LicenseClass,
   type MediaType,
 } from "@/lib/drivingQuestions";
 import {
@@ -25,6 +27,7 @@ import {
   type SavedFilter,
   type StatsMap,
 } from "@/lib/practiceStats";
+import { APP_SETTINGS_EVENT, loadAppSettings } from "@/lib/appSettings";
 
 type SortBy = "points-desc" | "points-asc" | "theme" | "chapter" | "random";
 type PointsFilter = "all" | "2" | "3" | "4" | "5";
@@ -158,6 +161,7 @@ function PracticeInner() {
   const searchParams = useSearchParams();
 
   const [lang, setLang] = useState<Language>("de");
+  const [licenseClass, setLicenseClass] = useState<LicenseClass>("all");
   const [allQuestions, setAllQuestions] = useState<DrivingQuestion[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -199,6 +203,22 @@ function PracticeInner() {
 
   useEffect(() => {
     setSavedFilters(loadSavedFilters());
+  }, []);
+
+  // Language and license class are app-wide "modes" set from the header
+  // switcher, not per-session filters - pick up the current value on mount
+  // and stay in sync if it's changed while this page is open.
+  useEffect(() => {
+    const settings = loadAppSettings();
+    setLang(settings.lang);
+    setLicenseClass(settings.licenseClass);
+    function onChange(e: Event) {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.lang) setLang(detail.lang);
+      if (detail?.licenseClass) setLicenseClass(detail.licenseClass);
+    }
+    window.addEventListener(APP_SETTINGS_EVENT, onChange);
+    return () => window.removeEventListener(APP_SETTINGS_EVENT, onChange);
   }, []);
 
   // Load questions whenever the language changes.
@@ -265,6 +285,9 @@ function PracticeInner() {
     if (filterMedia !== "all") {
       list = list.filter((q) => questionMediaType(q) === filterMedia);
     }
+    if (licenseClass !== "all") {
+      list = list.filter((q) => appliesToLicenseClass(q, licenseClass));
+    }
     if (numericOnly) {
       list = list.filter(isNumericAnswerQuestion);
     }
@@ -288,6 +311,7 @@ function PracticeInner() {
     filterTheme,
     filterChapter,
     filterMedia,
+    licenseClass,
     numericOnly,
     keyword,
     mode,
@@ -607,19 +631,10 @@ function PracticeInner() {
                 <option value="random">Random</option>
               </select>
             </label>
-
-            <label className="flex flex-col gap-1">
-              Language
-              <select
-                className="border border-border rounded-lg p-2 bg-background"
-                value={lang}
-                onChange={(e) => setLang(e.target.value as Language)}
-              >
-                <option value="de">German</option>
-                <option value="en">English</option>
-              </select>
-            </label>
           </div>
+          <p className="text-xs text-muted-foreground">
+            Language and license class are set from the switcher at the top of the page.
+          </p>
 
           <div className="flex gap-2">
             {sortBy === "random" && (
