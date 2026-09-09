@@ -189,6 +189,7 @@ export interface SavedFilter {
   media: string;
   points: string;
   numericOnly?: boolean;
+  examPart?: string;
   keyword: string;
   sortBy: string;
 }

@@ -55,7 +55,7 @@ function ModeSwitcherInner() {
         <button
           onClick={() => update({ licenseClass: "B" })}
           className={pillClass(settings.licenseClass === "B")}
-          title="Grundstoff + Class B (car) Zusatzstoff only"
+          title="Grundstoff + Class B (car) Zusatzstoff, minus truck/bus-only chapters"
         >
           Class B
         </button>

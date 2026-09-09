@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   getAllQuestions,
   groupByPoints,
+  isGrundstoff,
   isNumericAnswerQuestion,
   questionMediaType,
   themeEmoji,
@@ -16,6 +17,8 @@ export default async function Home() {
   const videoCount = questions.filter((q) => questionMediaType(q) === "video").length;
   const imageCount = questions.filter((q) => questionMediaType(q) === "image").length;
   const numericCount = questions.filter(isNumericAnswerQuestion).length;
+  const grundstoffCount = questions.filter(isGrundstoff).length;
+  const zusatzstoffCount = questions.length - grundstoffCount;
   const themeCount = new Set(questions.map((q) => q.theme_name)).size;
   const mediaCount = videoCount + imageCount;
 
@@ -62,6 +65,36 @@ export default async function Home() {
 
       <section className="px-4 py-10">
         <div className="max-w-4xl mx-auto">
+          <h2 className="font-semibold text-lg mb-4">Practice by exam part</h2>
+          <div className="grid grid-cols-2 gap-3 mb-8">
+            <Link
+              href="/practice?part=grundstoff"
+              className="rounded-2xl p-4 border border-primary/30 bg-primary/5 hover:shadow-md transition"
+            >
+              <div className="text-2xl">📚</div>
+              <div className="font-medium text-sm mt-1">Basic knowledge</div>
+              <div className="text-xs text-muted-foreground mt-1">
+                Grundstoff · {grundstoffCount} questions
+              </div>
+              <div className="text-xs text-muted-foreground mt-2">
+                Asked in every license class&rsquo;s exam
+              </div>
+            </Link>
+            <Link
+              href="/practice?part=zusatzstoff"
+              className="rounded-2xl p-4 border border-accent/30 bg-accent/5 hover:shadow-md transition"
+            >
+              <div className="text-2xl">🚙</div>
+              <div className="font-medium text-sm mt-1">Class-specific</div>
+              <div className="text-xs text-muted-foreground mt-1">
+                Zusatzstoff · {zusatzstoffCount} questions
+              </div>
+              <div className="text-xs text-muted-foreground mt-2">
+                Narrows to your class when Class B mode is on
+              </div>
+            </Link>
+          </div>
+
           <h2 className="font-semibold text-lg mb-4">Practice by category</h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
             {themesByCount.map(([theme, count]) => (

@@ -161,12 +161,45 @@ export function isGrundstoff(q: RawDrivingQuestion): boolean {
 
 const CLASS_B_ZUSATZSTOFF_MINORS = new Set([1, 2, 5, 6, 7]);
 
+// Theme-level alone is too coarse: a few chapters sitting inside otherwise
+// Class-B-relevant themes are squarely commercial-vehicle material, scoped
+// by law to vehicles over 3.5 t or to commercial passenger/goods transport,
+// so a car candidate never sees them. Keyed on the chapter's numeric code,
+// which is the same in the German and English catalogs.
+const CLASS_B_EXCLUDED_CHAPTERS = new Set([
+  "2.6.04", // Lenk- und Ruhezeiten (EU driving/rest times, >3.5 t)
+  "2.6.05", // EG-Kontrollgerät (tachograph)
+  "2.6.06", // Abmessungen, Gewichte und Geschwindigkeitsbegrenzer
+  "2.2.30", // Sonntagsfahrverbot (HGV weekend/holiday ban)
+  "2.7.09", // Entgegennahme, Transport und Ablieferung der Güter
+]);
+
+function chapterCode(chapterNumber: string): string | null {
+  return chapterNumber.match(/\d+\.\d+\.\d+/)?.[0] ?? null;
+}
+
+// The theory exam itself is asked in two parts: Grundstoff (basic knowledge,
+// identical for every license class) and Zusatzstoff (the questions specific
+// to the class you're taking). Klasse B, for example, is 20 Grundstoff + 10
+// Zusatzstoff questions. Combine this with the license-class mode to get
+// "Class B specific" rather than "any class's Zusatzstoff".
+export type ExamPart = "all" | "grundstoff" | "zusatzstoff";
+
+export function matchesExamPart(q: RawDrivingQuestion, part: ExamPart): boolean {
+  if (part === "all") return true;
+  return part === "grundstoff" ? isGrundstoff(q) : !isGrundstoff(q);
+}
+
 export function appliesToLicenseClass(q: RawDrivingQuestion, cls: LicenseClass): boolean {
   if (cls === "all") return true;
   const mm = themeMajorMinor(q.theme_number);
   if (!mm) return true;
   const [major, minor] = mm;
   if (major === 1) return true; // Grundstoff applies to every class
-  if (cls === "B") return major === 2 && CLASS_B_ZUSATZSTOFF_MINORS.has(minor);
+  if (cls === "B") {
+    if (major !== 2 || !CLASS_B_ZUSATZSTOFF_MINORS.has(minor)) return false;
+    const code = chapterCode(q.chapter_number);
+    return !(code && CLASS_B_EXCLUDED_CHAPTERS.has(code));
+  }
   return true;
 }

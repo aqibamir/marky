@@ -8,10 +8,12 @@ import QuestionMedia from "@/components/QuestionMedia";
 import {
   appliesToLicenseClass,
   isNumericAnswerQuestion,
+  matchesExamPart,
   questionMediaType,
   themeEmoji,
   themeLabel,
   type DrivingQuestion,
+  type ExamPart,
   type Language,
   type LicenseClass,
   type MediaType,
@@ -170,6 +172,7 @@ function PracticeInner() {
   const [filterTheme, setFilterTheme] = useState<string>("all");
   const [filterChapter, setFilterChapter] = useState<string>("all");
   const [filterMedia, setFilterMedia] = useState<MediaFilter>("all");
+  const [examPart, setExamPart] = useState<ExamPart>("all");
   const [numericOnly, setNumericOnly] = useState(false);
   const [keyword, setKeyword] = useState("");
   const [mode, setMode] = useState<Mode>("new");
@@ -192,12 +195,14 @@ function PracticeInner() {
     const m = searchParams.get("media");
     const mo = searchParams.get("mode");
     const num = searchParams.get("numeric");
+    const part = searchParams.get("part");
     if (p && ["2", "3", "4", "5"].includes(p)) setFilterPoints(p as PointsFilter);
     if (t) setFilterTheme(t);
     if (c) setFilterChapter(c);
     if (m && ["video", "image", "none"].includes(m)) setFilterMedia(m as MediaFilter);
     if (mo && ["new", "due", "weak", "all"].includes(mo)) setMode(mo as Mode);
     if (num === "1") setNumericOnly(true);
+    if (part === "grundstoff" || part === "zusatzstoff") setExamPart(part);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -288,6 +293,9 @@ function PracticeInner() {
     if (licenseClass !== "all") {
       list = list.filter((q) => appliesToLicenseClass(q, licenseClass));
     }
+    if (examPart !== "all") {
+      list = list.filter((q) => matchesExamPart(q, examPart));
+    }
     if (numericOnly) {
       list = list.filter(isNumericAnswerQuestion);
     }
@@ -312,6 +320,7 @@ function PracticeInner() {
     filterChapter,
     filterMedia,
     licenseClass,
+    examPart,
     numericOnly,
     keyword,
     mode,
@@ -377,6 +386,7 @@ function PracticeInner() {
     setFilterMedia(f.media as MediaFilter);
     setFilterPoints(f.points as PointsFilter);
     setNumericOnly(f.numericOnly ?? false);
+    setExamPart((f.examPart as ExamPart) ?? "all");
     setKeyword(f.keyword);
     setSortBy(f.sortBy as SortBy);
     setFiltersOpen(true);
@@ -394,6 +404,7 @@ function PracticeInner() {
       media: filterMedia,
       points: filterPoints,
       numericOnly,
+      examPart,
       keyword,
       sortBy,
     };
@@ -431,6 +442,13 @@ function PracticeInner() {
     filterChapter !== "all" ? filterChapter : null,
     filterPoints === "all" ? null : `${filterPoints} Punkte`,
     filterMedia === "all" ? null : filterMedia,
+    examPart === "all"
+      ? null
+      : examPart === "grundstoff"
+      ? "Basic knowledge"
+      : licenseClass === "B"
+      ? "Class B specific"
+      : "Class-specific",
     numericOnly ? "🔢 numeric" : null,
     keyword ? `"${keyword}"` : null,
   ]
@@ -513,6 +531,40 @@ function PracticeInner() {
                   }`}
                 >
                   {MODE_INFO[m].label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div className="text-xs font-semibold text-muted-foreground mb-1.5">
+              Exam part
+            </div>
+            <div className="grid grid-cols-3 gap-1 bg-secondary rounded-full p-1">
+              {(["all", "grundstoff", "zusatzstoff"] as ExamPart[]).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setExamPart(p)}
+                  title={
+                    p === "grundstoff"
+                      ? "Grundstoff - basic knowledge, asked in every license class"
+                      : p === "zusatzstoff"
+                      ? "Zusatzstoff - the class-specific half of the exam"
+                      : "Both parts"
+                  }
+                  className={`rounded-full py-1.5 text-xs font-medium transition-colors ${
+                    examPart === p
+                      ? "bg-primary text-primary-foreground glow-primary"
+                      : "hover:bg-background/60"
+                  }`}
+                >
+                  {p === "all"
+                    ? "Both"
+                    : p === "grundstoff"
+                    ? "Basic"
+                    : licenseClass === "B"
+                    ? "Class B"
+                    : "Class-specific"}
                 </button>
               ))}
             </div>
