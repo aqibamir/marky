@@ -90,3 +90,38 @@ export async function getQuestionsSortedByPoints(
   const all = await getAllQuestions(lang);
   return sortByPoints(all, order);
 }
+
+export type MediaType = "video" | "image" | "none";
+
+export function questionMediaType(q: RawDrivingQuestion): MediaType {
+  if (q.video_urls?.length) return "video";
+  if (q.image_urls?.length) return "image";
+  return "none";
+}
+
+// Friendly English label + icon for each raw German theme name, so filters
+// and category chips don't just dump the raw catalog theme strings on users.
+export const THEME_INFO: Record<string, { label: string; emoji: string }> = {
+  "Verkehrszeichen": { label: "Traffic Signs", emoji: "🚸" },
+  "Gefahrenlehre": { label: "Hazard Perception", emoji: "⚠️" },
+  "Verhalten Im Strassenverkehr": { label: "Road Behavior", emoji: "🚗" },
+  "Technik": { label: "Vehicle Technology", emoji: "🔧" },
+  "Vorschriften Ueber Den Betrieb Der Fahrzeuge": {
+    label: "Vehicle Operation Rules",
+    emoji: "📋",
+  },
+  "Umweltschutz": { label: "Environment", emoji: "🌱" },
+  "Vorfahrt Vorrang": { label: "Right of Way", emoji: "🛑" },
+  "Eignung Und Befaehigung Von Kraftfahrern": {
+    label: "Driver Fitness",
+    emoji: "🩺",
+  },
+};
+
+export function themeLabel(theme: string): string {
+  return THEME_INFO[theme]?.label ?? theme;
+}
+
+export function themeEmoji(theme: string): string {
+  return THEME_INFO[theme]?.emoji ?? "📘";
+}

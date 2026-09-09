@@ -2,13 +2,22 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import QuestionMedia from "@/components/QuestionMedia";
-import type { DrivingQuestion, Language } from "@/lib/drivingQuestions";
+import {
+  questionMediaType,
+  themeEmoji,
+  themeLabel,
+  type DrivingQuestion,
+  type Language,
+  type MediaType,
+} from "@/lib/drivingQuestions";
 
 type SortBy = "points-desc" | "points-asc" | "theme" | "chapter" | "random";
 type PointsFilter = "all" | "2" | "3" | "4" | "5";
+type MediaFilter = "all" | MediaType;
+type Mode = "new" | "missed" | "all";
 
 interface AnswerRecord {
   selected: string[];
@@ -62,6 +71,31 @@ function seededShuffle<T>(items: T[], seed: number): T[] {
   return arr;
 }
 
+function sortList(list: DrivingQuestion[], sortBy: SortBy, shuffleSeed: number) {
+  switch (sortBy) {
+    case "points-desc":
+      return [...list].sort((a, b) => b.pointsValue - a.pointsValue);
+    case "points-asc":
+      return [...list].sort((a, b) => a.pointsValue - b.pointsValue);
+    case "theme":
+      return [...list].sort(
+        (a, b) =>
+          a.theme_name.localeCompare(b.theme_name) ||
+          a.question_number.localeCompare(b.question_number)
+      );
+    case "chapter":
+      return [...list].sort(
+        (a, b) =>
+          a.chapter_number.localeCompare(b.chapter_number) ||
+          a.question_number.localeCompare(b.question_number)
+      );
+    case "random":
+      return seededShuffle(list, shuffleSeed);
+    default:
+      return list;
+  }
+}
+
 function pointsBadgeClass(points: number) {
   switch (points) {
     case 2:
@@ -77,9 +111,18 @@ function pointsBadgeClass(points: number) {
   }
 }
 
+const MEDIA_LABEL: Record<MediaFilter, string> = {
+  all: "Any media",
+  video: "🎬 Video only",
+  image: "🖼️ Picture only",
+  none: "Text only",
+};
+
 function PracticeInner() {
   const searchParams = useSearchParams();
   const initialPoints = searchParams.get("points");
+  const initialTheme = searchParams.get("theme");
+  const initialMedia = searchParams.get("media");
 
   const [lang, setLang] = useState<Language>("de");
   const [allQuestions, setAllQuestions] = useState<DrivingQuestion[] | null>(null);
@@ -91,16 +134,26 @@ function PracticeInner() {
       ? (initialPoints as PointsFilter)
       : "all"
   );
-  const [filterTheme, setFilterTheme] = useState<string>("all");
-  const [onlyUnanswered, setOnlyUnanswered] = useState(false);
-  const [onlyIncorrect, setOnlyIncorrect] = useState(false);
+  const [filterTheme, setFilterTheme] = useState<string>(initialTheme ?? "all");
+  const [filterMedia, setFilterMedia] = useState<MediaFilter>(
+    initialMedia && ["video", "image", "none"].includes(initialMedia)
+      ? (initialMedia as MediaFilter)
+      : "all"
+  );
+  const [mode, setMode] = useState<Mode>("new");
   const [shuffleSeed, setShuffleSeed] = useState(1);
   const [filtersOpen, setFiltersOpen] = useState(false);
 
+  const [sessionQueue, setSessionQueue] = useState<DrivingQuestion[]>([]);
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<string[]>([]);
   const [checked, setChecked] = useState(false);
   const [progress, setProgress] = useState<ProgressMap>({});
+  const progressRef = useRef<ProgressMap>({});
+
+  useEffect(() => {
+    progressRef.current = progress;
+  }, [progress]);
 
   // Load questions whenever the language changes.
   useEffect(() => {
@@ -118,7 +171,9 @@ function PracticeInner() {
       .catch((err) => {
         if (!cancelled) setLoadError(err.message ?? "Failed to load questions");
       });
-    setProgress(loadProgress(lang));
+    const loaded = loadProgress(lang);
+    setProgress(loaded);
+    progressRef.current = loaded;
     return () => {
       cancelled = true;
     };
@@ -129,57 +184,38 @@ function PracticeInner() {
     return Array.from(new Set(allQuestions.map((q) => q.theme_name))).sort();
   }, [allQuestions]);
 
-  const filtered = useMemo(() => {
-    let list = allQuestions ?? [];
+  // Build the session queue once per filter/sort/mode change. Deliberately
+  // does NOT re-run when `progress` changes mid-session (it reads the ref
+  // instead) so answering a question never yanks it out from under the
+  // question currently on screen. A fresh queue (new filters, new session,
+  // reloaded page) is what actually excludes already-answered questions.
+  useEffect(() => {
+    if (!allQuestions) return;
+    let list = allQuestions;
     if (filterPoints !== "all") {
       list = list.filter((q) => q.pointsValue === Number(filterPoints));
     }
     if (filterTheme !== "all") {
       list = list.filter((q) => q.theme_name === filterTheme);
     }
-    if (onlyUnanswered) {
-      list = list.filter((q) => !progress[q.question_id]);
+    if (filterMedia !== "all") {
+      list = list.filter((q) => questionMediaType(q) === filterMedia);
     }
-    if (onlyIncorrect) {
-      list = list.filter((q) => progress[q.question_id]?.correct === false);
+    const snapshot = progressRef.current;
+    if (mode === "new") {
+      list = list.filter((q) => !snapshot[q.question_id]);
+    } else if (mode === "missed") {
+      list = list.filter((q) => snapshot[q.question_id]?.correct === false);
     }
-    return list;
-  }, [allQuestions, filterPoints, filterTheme, onlyUnanswered, onlyIncorrect, progress]);
-
-  const questions = useMemo(() => {
-    const list = [...filtered];
-    switch (sortBy) {
-      case "points-desc":
-        return list.sort((a, b) => b.pointsValue - a.pointsValue);
-      case "points-asc":
-        return list.sort((a, b) => a.pointsValue - b.pointsValue);
-      case "theme":
-        return list.sort(
-          (a, b) =>
-            a.theme_name.localeCompare(b.theme_name) ||
-            a.question_number.localeCompare(b.question_number)
-        );
-      case "chapter":
-        return list.sort(
-          (a, b) =>
-            a.chapter_number.localeCompare(b.chapter_number) ||
-            a.question_number.localeCompare(b.question_number)
-        );
-      case "random":
-        return seededShuffle(list, shuffleSeed);
-      default:
-        return list;
-    }
-  }, [filtered, sortBy, shuffleSeed]);
-
-  // Jump back to the start whenever the active question set changes shape.
-  useEffect(() => {
+    setSessionQueue(sortList(list, sortBy, shuffleSeed));
     setIndex(0);
-  }, [sortBy, filterPoints, filterTheme, onlyUnanswered, onlyIncorrect, lang, shuffleSeed]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allQuestions, filterPoints, filterTheme, filterMedia, mode, sortBy, shuffleSeed, lang]);
 
-  const current = questions[index];
+  const current = sessionQueue[index];
 
-  // Restore any previous answer for the question now in view.
+  // Restore any previous answer for the question now in view (relevant in
+  // "missed"/"all" modes, where a question can already have an answer).
   useEffect(() => {
     if (!current) return;
     const prior = progress[current.question_id];
@@ -187,9 +223,12 @@ function PracticeInner() {
     setChecked(Boolean(prior));
   }, [current?.question_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const total = questions.length;
+  const total = sessionQueue.length;
   const answeredCount = Object.keys(progress).length;
   const correctCount = Object.values(progress).filter((p) => p.correct).length;
+  const isLastQuestion = index >= total - 1;
+  const isCorrectAnswer =
+    current && sameAnswer(selected, current.correct_answers.map((c) => c.letter));
 
   function toggleOption(letter: string) {
     if (!current || checked) return;
@@ -220,14 +259,10 @@ function PracticeInner() {
     setIndex((i) => Math.min(Math.max(i + delta, 0), Math.max(total - 1, 0)));
   }
 
-  function jumpToFirstUnanswered() {
-    const i = questions.findIndex((q) => !progress[q.question_id]);
-    if (i >= 0) setIndex(i);
-  }
-
   function resetProgress() {
     if (!confirm(`Clear all saved answers for ${lang.toUpperCase()}?`)) return;
     setProgress({});
+    progressRef.current = {};
     saveProgress(lang, {});
   }
 
@@ -241,19 +276,25 @@ function PracticeInner() {
 
   if (!allQuestions) {
     return (
-      <main className="max-w-2xl mx-auto p-4">
-        <p className="text-muted-foreground animate-pulse">Loading questions…</p>
+      <main className="max-w-2xl mx-auto p-4 space-y-3 w-full">
+        <div className="h-24 rounded-2xl bg-secondary animate-pulse" />
+        <div className="h-64 rounded-2xl bg-secondary animate-pulse" />
       </main>
     );
   }
 
-  const isCorrectAnswer =
-    current && sameAnswer(selected, current.correct_answers.map((c) => c.letter));
+  const filterSummary = [
+    mode === "new" ? "New questions" : mode === "missed" ? "Missed only" : "All questions",
+    filterTheme === "all" ? "All categories" : `${themeEmoji(filterTheme)} ${themeLabel(filterTheme)}`,
+    filterPoints === "all" ? "Any points" : `${filterPoints} Punkte`,
+    MEDIA_LABEL[filterMedia],
+  ].join(" · ");
+
   const progressPct = total > 0 ? ((index + 1) / total) * 100 : 0;
 
   return (
     <main className="max-w-2xl mx-auto w-full px-4 pt-4 pb-28 flex-1">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-3 gap-2">
         <div>
           <h1 className="text-xl font-bold">Practice</h1>
           <p className="text-xs text-muted-foreground">
@@ -263,97 +304,129 @@ function PracticeInner() {
         </div>
         <button
           onClick={() => setFiltersOpen((o) => !o)}
-          className="text-sm font-medium border border-border rounded-full px-3 py-1.5 hover:bg-secondary"
+          className="text-sm font-medium border border-border rounded-full px-3 py-1.5 hover:bg-secondary shrink-0"
         >
-          {filtersOpen ? "Hide filters" : "Filters"}
+          {filtersOpen ? "Done" : "Filters"}
         </button>
       </div>
 
+      {!filtersOpen && (
+        <button
+          onClick={() => setFiltersOpen(true)}
+          className="w-full text-left text-xs text-muted-foreground bg-secondary/60 rounded-full px-3 py-2 mb-4 truncate"
+        >
+          {filterSummary}
+        </button>
+      )}
+
       {filtersOpen && (
-        <div className="grid grid-cols-2 gap-3 mb-4 text-sm bg-secondary/60 rounded-2xl p-3">
-          <label className="flex flex-col gap-1">
-            Language
-            <select
-              className="border border-border rounded-lg p-2 bg-background"
-              value={lang}
-              onChange={(e) => setLang(e.target.value as Language)}
-            >
-              <option value="de">German</option>
-              <option value="en">English</option>
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-1">
-            Sort by
-            <select
-              className="border border-border rounded-lg p-2 bg-background"
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as SortBy)}
-            >
-              <option value="points-desc">Points (high → low)</option>
-              <option value="points-asc">Points (low → high)</option>
-              <option value="theme">Theme (A → Z)</option>
-              <option value="chapter">Chapter</option>
-              <option value="random">Random</option>
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-1">
-            Points
-            <select
-              className="border border-border rounded-lg p-2 bg-background"
-              value={filterPoints}
-              onChange={(e) => setFilterPoints(e.target.value as PointsFilter)}
-            >
-              <option value="all">All</option>
-              <option value="2">2 Punkte</option>
-              <option value="3">3 Punkte</option>
-              <option value="4">4 Punkte</option>
-              <option value="5">5 Punkte</option>
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-1">
-            Theme
-            <select
-              className="border border-border rounded-lg p-2 bg-background"
-              value={filterTheme}
-              onChange={(e) => setFilterTheme(e.target.value)}
-            >
-              <option value="all">All themes</option>
-              {themes.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
+        <div className="mb-4 bg-secondary/60 rounded-2xl p-3 space-y-3 text-sm">
+          <div>
+            <div className="text-xs font-semibold text-muted-foreground mb-1.5">Mode</div>
+            <div className="flex gap-1 bg-background rounded-full p-1">
+              {(["new", "missed", "all"] as Mode[]).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setMode(m)}
+                  className={`flex-1 rounded-full py-1.5 text-xs font-medium transition-colors ${
+                    mode === m ? "bg-primary text-primary-foreground" : "hover:bg-secondary"
+                  }`}
+                >
+                  {m === "new" ? "New" : m === "missed" ? "Missed" : "All"}
+                </button>
               ))}
-            </select>
-          </label>
+            </div>
+          </div>
 
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={onlyUnanswered}
-              onChange={(e) => setOnlyUnanswered(e.target.checked)}
-            />
-            Unanswered only
-          </label>
+          <div>
+            <div className="text-xs font-semibold text-muted-foreground mb-1.5">Category</div>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                onClick={() => setFilterTheme("all")}
+                className={`rounded-full px-3 py-1 text-xs border ${
+                  filterTheme === "all"
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background border-border"
+                }`}
+              >
+                All
+              </button>
+              {themes.map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setFilterTheme(t)}
+                  className={`rounded-full px-3 py-1 text-xs border ${
+                    filterTheme === t
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-background border-border"
+                  }`}
+                >
+                  {themeEmoji(t)} {themeLabel(t)}
+                </button>
+              ))}
+            </div>
+          </div>
 
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={onlyIncorrect}
-              onChange={(e) => setOnlyIncorrect(e.target.checked)}
-            />
-            Missed only
-          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex flex-col gap-1">
+              Media
+              <select
+                className="border border-border rounded-lg p-2 bg-background"
+                value={filterMedia}
+                onChange={(e) => setFilterMedia(e.target.value as MediaFilter)}
+              >
+                <option value="all">Any media</option>
+                <option value="video">🎬 Video only</option>
+                <option value="image">🖼️ Picture only</option>
+                <option value="none">Text only</option>
+              </select>
+            </label>
+
+            <label className="flex flex-col gap-1">
+              Points
+              <select
+                className="border border-border rounded-lg p-2 bg-background"
+                value={filterPoints}
+                onChange={(e) => setFilterPoints(e.target.value as PointsFilter)}
+              >
+                <option value="all">All</option>
+                <option value="2">2 Punkte</option>
+                <option value="3">3 Punkte</option>
+                <option value="4">4 Punkte</option>
+                <option value="5">5 Punkte</option>
+              </select>
+            </label>
+
+            <label className="flex flex-col gap-1">
+              Sort by
+              <select
+                className="border border-border rounded-lg p-2 bg-background"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortBy)}
+              >
+                <option value="points-desc">Points (high → low)</option>
+                <option value="points-asc">Points (low → high)</option>
+                <option value="theme">Theme (A → Z)</option>
+                <option value="chapter">Chapter</option>
+                <option value="random">Random</option>
+              </select>
+            </label>
+
+            <label className="flex flex-col gap-1">
+              Language
+              <select
+                className="border border-border rounded-lg p-2 bg-background"
+                value={lang}
+                onChange={(e) => setLang(e.target.value as Language)}
+              >
+                <option value="de">German</option>
+                <option value="en">English</option>
+              </select>
+            </label>
+          </div>
 
           {sortBy === "random" && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="col-span-2"
-              onClick={() => setShuffleSeed((s) => s + 1)}
-            >
+            <Button variant="outline" size="sm" className="w-full" onClick={() => setShuffleSeed((s) => s + 1)}>
               Reshuffle
             </Button>
           )}
@@ -371,7 +444,19 @@ function PracticeInner() {
       )}
 
       {total === 0 && (
-        <p className="text-muted-foreground">No questions match the current filters.</p>
+        <div className="text-center py-16">
+          <p className="text-lg font-medium mb-1">
+            {mode === "new" ? "🎉 Nothing new here!" : "No questions match"}
+          </p>
+          <p className="text-sm text-muted-foreground mb-4">
+            {mode === "new"
+              ? "You've answered every question in this category already."
+              : "Try a different category, points, or media filter."}
+          </p>
+          {mode === "new" && (
+            <Button onClick={() => setMode("all")}>Practice this set again</Button>
+          )}
+        </div>
       )}
 
       {current && (
@@ -451,6 +536,12 @@ function PracticeInner() {
         </div>
       )}
 
+      {total > 0 && isLastQuestion && checked && (
+        <div className="mt-4 text-center text-sm text-muted-foreground">
+          That&rsquo;s the last question in this set — nice work! Adjust filters above to keep going.
+        </div>
+      )}
+
       <div className="mt-4 text-center">
         <button onClick={resetProgress} className="text-xs text-muted-foreground underline">
           Reset saved progress ({lang.toUpperCase()})
@@ -464,13 +555,7 @@ function PracticeInner() {
             <Button variant="outline" onClick={() => goTo(-1)} disabled={index === 0}>
               ← Previous
             </Button>
-            <button
-              onClick={jumpToFirstUnanswered}
-              className="text-xs text-muted-foreground underline hidden sm:block"
-            >
-              First unanswered
-            </button>
-            <Button onClick={() => goTo(1)} disabled={index >= total - 1}>
+            <Button onClick={() => goTo(1)} disabled={isLastQuestion}>
               Next →
             </Button>
           </div>

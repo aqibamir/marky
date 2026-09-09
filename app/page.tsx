@@ -1,14 +1,26 @@
 import Link from "next/link";
-import { getAllQuestions, groupByPoints } from "@/lib/drivingQuestions";
+import {
+  getAllQuestions,
+  groupByPoints,
+  questionMediaType,
+  themeEmoji,
+  themeLabel,
+} from "@/lib/drivingQuestions";
 import { Button } from "@/components/ui/button";
 
 export default async function Home() {
   const questions = await getAllQuestions("de");
   const grouped = groupByPoints(questions);
+  const videoCount = questions.filter((q) => questionMediaType(q) === "video").length;
+  const imageCount = questions.filter((q) => questionMediaType(q) === "image").length;
   const themeCount = new Set(questions.map((q) => q.theme_name)).size;
-  const mediaCount = questions.filter(
-    (q) => (q.image_urls?.length ?? 0) > 0 || (q.video_urls?.length ?? 0) > 0
-  ).length;
+  const mediaCount = videoCount + imageCount;
+
+  const themeCounts = new Map<string, number>();
+  for (const q of questions) {
+    themeCounts.set(q.theme_name, (themeCounts.get(q.theme_name) ?? 0) + 1);
+  }
+  const themesByCount = Array.from(themeCounts.entries()).sort((a, b) => b[1] - a[1]);
 
   return (
     <main className="flex-1 flex flex-col">
@@ -49,6 +61,51 @@ export default async function Home() {
 
       <section className="px-4 py-10">
         <div className="max-w-4xl mx-auto">
+          <h2 className="font-semibold text-lg mb-4">Practice by category</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+            {themesByCount.map(([theme, count]) => (
+              <Link
+                key={theme}
+                href={`/practice?theme=${encodeURIComponent(theme)}`}
+                className="rounded-2xl p-4 border border-border bg-card hover:shadow-md transition"
+              >
+                <div className="text-2xl">{themeEmoji(theme)}</div>
+                <div className="font-medium text-sm mt-1">{themeLabel(theme)}</div>
+                <div className="text-xs text-muted-foreground mt-1">{count} questions</div>
+              </Link>
+            ))}
+          </div>
+
+          <h2 className="font-semibold text-lg mb-4">Practice by media</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-8">
+            <Link
+              href="/practice?media=video"
+              className="rounded-2xl p-4 border border-border bg-card hover:shadow-md transition"
+            >
+              <div className="text-2xl">🎬</div>
+              <div className="font-medium text-sm mt-1">Hazard videos</div>
+              <div className="text-xs text-muted-foreground mt-1">{videoCount} questions</div>
+            </Link>
+            <Link
+              href="/practice?media=image"
+              className="rounded-2xl p-4 border border-border bg-card hover:shadow-md transition"
+            >
+              <div className="text-2xl">🖼️</div>
+              <div className="font-medium text-sm mt-1">Picture questions</div>
+              <div className="text-xs text-muted-foreground mt-1">{imageCount} questions</div>
+            </Link>
+            <Link
+              href="/practice?media=none"
+              className="rounded-2xl p-4 border border-border bg-card hover:shadow-md transition"
+            >
+              <div className="text-2xl">📝</div>
+              <div className="font-medium text-sm mt-1">Text only</div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {questions.length - mediaCount} questions
+              </div>
+            </Link>
+          </div>
+
           <h2 className="font-semibold text-lg mb-4">Questions by points</h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {Array.from(grouped.entries()).map(([points, qs]) => (
