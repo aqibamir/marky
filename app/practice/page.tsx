@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import QuestionMedia from "@/components/QuestionMedia";
 import {
   appliesToLicenseClass,
+  isFreeEntryQuestion,
   isNumericAnswerQuestion,
   matchesExamPart,
   questionMediaType,
@@ -36,10 +37,19 @@ type PointsFilter = "all" | "2" | "3" | "4" | "5";
 type MediaFilter = "all" | MediaType;
 type Mode = "new" | "due" | "weak" | "all";
 
+// Typed answers should match regardless of decimal separator or padding:
+// the catalog stores "1,5" but "1.5" (or " 1,50 ") is the same answer.
+function normalizeAnswer(value: string): string {
+  const trimmed = value.trim();
+  if (!/^[+-]?[\d.,\s]+$/.test(trimmed)) return trimmed;
+  const n = parseFloat(trimmed.replace(/\s/g, "").replace(",", "."));
+  return Number.isFinite(n) ? String(n) : trimmed;
+}
+
 function sameAnswer(a: string[], b: string[]) {
   if (a.length !== b.length) return false;
-  const sortedA = [...a].sort();
-  const sortedB = [...b].sort();
+  const sortedA = a.map(normalizeAnswer).sort();
+  const sortedB = b.map(normalizeAnswer).sort();
   return sortedA.every((v, i) => v === sortedB[i]);
 }
 
@@ -731,6 +741,7 @@ function PracticeInner() {
 
       {current && (() => {
         const hasVideo = (current.video_urls?.length ?? 0) > 0;
+        const isFreeEntry = isFreeEntryQuestion(current);
         return (
         <div className="rounded-2xl border border-border bg-card shadow-sm p-4">
           <div className="flex justify-between items-center text-xs text-muted-foreground mb-3">
@@ -764,6 +775,42 @@ function PracticeInner() {
 
           <div className="font-medium mb-3">{current.question_text}</div>
 
+          {isFreeEntry ? (
+            <div className="mb-4">
+              <label className="block text-xs text-muted-foreground mb-1.5">
+                Type the number
+              </label>
+              <input
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                value={selected[0] ?? ""}
+                onChange={(e) =>
+                  setSelected(e.target.value === "" ? [] : [e.target.value])
+                }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !checked && selected.length > 0) checkAnswer();
+                }}
+                disabled={checked}
+                placeholder="e.g. 50"
+                className={`w-full border-2 rounded-xl p-3 bg-background text-lg font-semibold tracking-wide outline-none transition-colors ${
+                  checked
+                    ? isCorrectAnswer
+                      ? "border-success bg-success/10 glow-border"
+                      : "border-destructive bg-destructive/10"
+                    : "border-border focus:border-primary"
+                }`}
+              />
+              {checked && !isCorrectAnswer && (
+                <p className="text-sm mt-2 text-muted-foreground">
+                  Correct answer:{" "}
+                  <span className="font-semibold text-success">
+                    {current.correct_answers.map((c) => c.letter).join(", ")}
+                  </span>
+                </p>
+              )}
+            </div>
+          ) : (
           <div className="space-y-2 mb-4">
             {current.options.map((opt) => {
               const isSelected = selected.includes(opt.letter);
@@ -796,6 +843,7 @@ function PracticeInner() {
               );
             })}
           </div>
+          )}
 
           {!checked ? (
             <Button className="w-full" onClick={checkAnswer} disabled={selected.length === 0}>

@@ -134,7 +134,18 @@ function looksNumeric(text: string): boolean {
   return /^[+-]?\d+([.,]\d+)?/.test(text.trim());
 }
 
+// Some questions aren't multiple choice at all: the catalog ships them with
+// no options and the answer stored as the number itself, and the exam has
+// you type it in ("____ m", "____ km/h").
+export function isFreeEntryQuestion(q: RawDrivingQuestion): boolean {
+  return q.options.length === 0 && q.correct_answers.length > 0;
+}
+
 export function isNumericAnswerQuestion(q: RawDrivingQuestion): boolean {
+  // Fill-in-the-number questions are numeric by definition.
+  if (isFreeEntryQuestion(q)) {
+    return q.correct_answers.every((a) => looksNumeric(a.letter));
+  }
   if (q.options.length < 2) return false;
   const numericCount = q.options.filter((o) => looksNumeric(o.text)).length;
   return numericCount >= Math.max(2, q.options.length - 1);
