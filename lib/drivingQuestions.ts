@@ -6,6 +6,8 @@
 // hotlinked to their original hosts) rather than duplicating the full
 // catalog as committed files here.
 
+import { CLASS_B_EXCLUDED_QUESTION_IDS } from "./classBExclusions";
+
 export interface QuestionOption {
   letter: string;
   text: string;
@@ -210,7 +212,11 @@ export function appliesToLicenseClass(q: RawDrivingQuestion, cls: LicenseClass):
   if (cls === "B") {
     if (major !== 2 || !CLASS_B_ZUSATZSTOFF_MINORS.has(minor)) return false;
     const code = chapterCode(q.chapter_number);
-    return !(code && CLASS_B_EXCLUDED_CHAPTERS.has(code));
+    if (code && CLASS_B_EXCLUDED_CHAPTERS.has(code)) return false;
+    // Chapters Class B does need still carry the Lkw/Bus variants of the same
+    // question (2.2.03 Geschwindigkeit is half truck/bus speed limits), so
+    // drop those individually too.
+    return !CLASS_B_EXCLUDED_QUESTION_IDS.has(q.question_id);
   }
   return true;
 }
