@@ -196,6 +196,19 @@ function PracticeInner() {
   const [checked, setChecked] = useState(false);
   const [stats, setStats] = useState<StatsMap>({});
   const [videoStage, setVideoStage] = useState<"gate" | "revealed">("revealed");
+  // Snapshot of this question's history from BEFORE the current attempt, so
+  // "you've missed this before" reflects prior visits, not the answer you
+  // just gave.
+  const [priorHistory, setPriorHistory] = useState<{
+    wrongCount: number;
+    lastWrongSelected: string[] | null;
+  }>({ wrongCount: 0, lastWrongSelected: null });
+  // Questions answered so far in THIS page visit. Revisiting one via
+  // Previous/Next should show what you just answered; landing on it fresh
+  // (a new session, or a "weak"/"due" review) should let you actually try
+  // again instead of re-displaying a stale locked-in answer from before -
+  // the whole point of a review mode is retrying, not just re-reading it.
+  const [sessionAnsweredIds, setSessionAnsweredIds] = useState<Set<string>>(new Set());
 
   // Apply ?points=/?theme=/?media=/?mode= from links (homepage tiles, insights) once.
   useEffect(() => {
@@ -253,6 +266,7 @@ function PracticeInner() {
         if (!cancelled) setLoadError(err.message ?? "Failed to load questions");
       });
     setStats(loadStats(lang));
+    setSessionAnsweredIds(new Set());
     return () => {
       cancelled = true;
     };
@@ -341,18 +355,32 @@ function PracticeInner() {
 
   const current = sessionQueue[index];
 
-  // Restore any previous answer for the question now in view (relevant in
-  // "weak"/"due"/"all" modes, where a question can already have history).
-  // A hazard-clip question that hasn't been answered yet starts gated on
-  // the video; anything else (or an already-answered video question) goes
-  // straight to the question with its still frame.
+  // Restore an answer only if you gave it earlier in THIS visit (so
+  // Previous/Next shows what you just picked). A question you're seeing via
+  // "weak"/"due"/"all" from an earlier session always starts fresh - that's
+  // the point of revisiting it. A hazard-clip question with no in-session
+  // answer starts gated on the video; anything else goes straight to the
+  // question (with a still frame in place of the video, if it has one).
   useEffect(() => {
     if (!current) return;
-    const prior = lastAttempt(stats[current.question_id]);
+    const stat = stats[current.question_id];
+    const answeredThisVisit = sessionAnsweredIds.has(current.question_id);
+    const prior = answeredThisVisit ? lastAttempt(stat) : undefined;
     setSelected(prior?.selected ?? []);
     setChecked(Boolean(prior));
     const hasVideo = (current.video_urls?.length ?? 0) > 0;
     setVideoStage(hasVideo && !prior ? "gate" : "revealed");
+
+    // Snapshot mistake history from before today's attempt, for the
+    // "you've missed this before" teaching prompt after checking.
+    const priorWrongAttempts = (stat?.attempts ?? []).filter(
+      (a) => !answeredThisVisit || a !== lastAttempt(stat)
+    );
+    const lastWrong = [...priorWrongAttempts].reverse().find((a) => !a.correct);
+    setPriorHistory({
+      wrongCount: priorWrongAttempts.filter((a) => !a.correct).length,
+      lastWrongSelected: lastWrong?.selected ?? null,
+    });
   }, [current?.question_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const total = sessionQueue.length;
@@ -383,6 +411,7 @@ function PracticeInner() {
     setStats(next);
     saveStats(lang, next);
     setChecked(true);
+    setSessionAnsweredIds((prev) => new Set(prev).add(current.question_id));
   }
 
   function goTo(delta: number) {
@@ -854,6 +883,35 @@ function PracticeInner() {
               <p className={isCorrectAnswer ? "text-success font-semibold" : "text-destructive font-semibold"}>
                 {isCorrectAnswer ? "✓ Correct!" : "✕ Not quite."}
               </p>
+
+              {priorHistory.wrongCount > 0 &&
+                (isCorrectAnswer ? (
+                  <p className="text-sm text-success mt-1">
+                    🎉 You&rsquo;d missed this one before — got it this time.
+                  </p>
+                ) : (
+                  <div className="mt-2 rounded-lg bg-warning/10 border border-warning/30 p-2">
+                    <p className="text-sm font-medium text-warning">
+                      ⚠️ You&rsquo;ve missed this {priorHistory.wrongCount + 1}× now
+                      {priorHistory.lastWrongSelected?.length
+                        ? ` — last time: ${priorHistory.lastWrongSelected
+                            .map(
+                              (l) =>
+                                current.options.find((o) => o.letter === l)?.letter ??
+                                l
+                            )
+                            .join(", ")}`
+                        : ""}
+                      .
+                    </p>
+                    {current.comment && (
+                      <p className="text-xs font-semibold text-muted-foreground mt-1.5">
+                        📖 The concept to remember:
+                      </p>
+                    )}
+                  </div>
+                ))}
+
               {current.comment && (
                 <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">
                   {current.comment}
