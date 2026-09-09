@@ -29,9 +29,14 @@ export default async function DrivingQuestionsPage({ searchParams }: PageProps) 
 
   return (
     <main className="max-w-4xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-2">
-        German Driving Theory Questions — sorted by points
-      </h1>
+      <div className="flex items-center justify-between mb-2">
+        <h1 className="text-2xl font-bold">
+          German Driving Theory Questions — sorted by points
+        </h1>
+        <Link href="/practice" className="text-sm underline text-gray-500 whitespace-nowrap">
+          Practice mode →
+        </Link>
+      </div>
       <p className="text-sm text-gray-500 mb-4">
         {all.length} questions total, sourced live from{" "}
         <a
