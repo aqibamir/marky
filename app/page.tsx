@@ -7,6 +7,7 @@ import {
   themeLabel,
 } from "@/lib/drivingQuestions";
 import { Button } from "@/components/ui/button";
+import DueReviewBanner from "@/components/DueReviewBanner";
 
 export default async function Home() {
   const questions = await getAllQuestions("de");
@@ -24,33 +25,31 @@ export default async function Home() {
 
   return (
     <main className="flex-1 flex flex-col">
-      <section className="bg-neutral-950 text-white px-4 py-16">
+      <section className="px-4 py-16">
         <div className="max-w-4xl mx-auto">
-          <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight leading-tight">
+          <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight leading-tight glow-text">
             German Driving
             <br />
-            Theory Test
+            <span className="text-primary">Theory Test</span>
           </h1>
-          <p className="mt-4 text-neutral-400 max-w-md">
+          <p className="mt-4 text-muted-foreground max-w-md">
             Every official Fragenkatalog question, with photos and hazard
             clips where the exam has them. Practice by points, by theme, or
-            just shuffle the whole deck.
+            just shuffle the whole deck - and see exactly where you keep
+            slipping up.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Button asChild size="lg">
               <Link href="/practice">Start practicing →</Link>
             </Button>
-            <Button
-              asChild
-              size="lg"
-              variant="outline"
-              className="border-neutral-700 text-white hover:bg-neutral-800 hover:text-white"
-            >
+            <Button asChild size="lg" variant="outline">
               <Link href="/driving-questions">Browse all questions</Link>
             </Button>
           </div>
 
-          <div className="mt-12 grid grid-cols-2 sm:grid-cols-4 gap-6 border-t border-neutral-800 pt-8">
+          <DueReviewBanner />
+
+          <div className="mt-12 grid grid-cols-2 sm:grid-cols-4 gap-6 border-t border-border pt-8">
             <Stat value={questions.length} label="questions" />
             <Stat value={themeCount} label="themes" />
             <Stat value={mediaCount} label="with photo/video" />
@@ -133,22 +132,20 @@ export default async function Home() {
 function Stat({ value, label }: { value: string | number; label: string }) {
   return (
     <div>
-      <div className="text-2xl font-bold">{value}</div>
-      <div className="text-xs text-neutral-500">{label}</div>
+      <div className="text-2xl font-bold text-primary">{value}</div>
+      <div className="text-xs text-muted-foreground">{label}</div>
     </div>
   );
 }
 
 function pointsStyle(points: number) {
   switch (points) {
-    case 2:
-      return "bg-secondary border-border";
-    case 3:
-      return "bg-blue-50 border-blue-200 dark:bg-blue-950 dark:border-blue-900";
-    case 4:
-      return "bg-orange-50 border-orange-200 dark:bg-orange-950 dark:border-orange-900";
     case 5:
-      return "bg-red-50 border-red-200 dark:bg-red-950 dark:border-red-900";
+      return "bg-destructive/10 border-destructive/30";
+    case 4:
+      return "bg-warning/10 border-warning/30";
+    case 3:
+      return "bg-accent/10 border-accent/30";
     default:
       return "bg-secondary border-border";
   }

@@ -19,14 +19,12 @@ interface PageProps {
 
 function pointsBadgeClass(points: number) {
   switch (points) {
-    case 2:
-      return "bg-secondary text-secondary-foreground";
     case 3:
-      return "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300";
+      return "bg-accent/15 text-accent";
     case 4:
-      return "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300";
+      return "bg-warning/15 text-warning";
     case 5:
-      return "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300";
+      return "bg-destructive/15 text-destructive";
     default:
       return "bg-secondary text-secondary-foreground";
   }

@@ -4,57 +4,65 @@
 
 @layer base {
   :root {
-    /* iOS-system-inspired palette: blue primary, green/red/orange semantic accents */
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 211 100% 50%; /* iOS blue #007AFF */
-    --primary-foreground: 0 0% 100%;
-    --secondary: 240 5% 96%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 5% 96%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 243 75% 65%; /* #5E5CE6 */
-    --accent-foreground: 0 0% 100%;
-    --success: 142 71% 45%; /* iOS green #34C759 */
-    --success-foreground: 0 0% 100%;
-    --warning: 35 100% 50%; /* iOS orange #FF9500 */
-    --warning-foreground: 0 0% 100%;
-    --destructive: 4 100% 59%; /* iOS red #FF3B30 */
+    /* Dark, neon-green brand look: near-black surfaces, white text, a
+       glowing spring-green primary. This is the app's one committed look
+       (not gated behind system light/dark), per the requested direction. */
+    --background: 160 20% 5%;
+    --foreground: 120 30% 96%;
+    --card: 160 15% 9%;
+    --card-foreground: 120 30% 96%;
+    --popover: 160 18% 7%;
+    --popover-foreground: 120 30% 96%;
+    --primary: 150 100% 50%; /* neon spring green */
+    --primary-foreground: 160 40% 6%;
+    --secondary: 160 12% 14%;
+    --secondary-foreground: 120 20% 92%;
+    --muted: 160 12% 14%;
+    --muted-foreground: 150 8% 62%;
+    --accent: 174 100% 45%; /* neon cyan, used sparingly */
+    --accent-foreground: 160 40% 6%;
+    --success: 150 100% 50%;
+    --success-foreground: 160 40% 6%;
+    --warning: 45 100% 55%;
+    --warning-foreground: 160 40% 6%;
+    --destructive: 346 100% 62%;
     --destructive-foreground: 0 0% 100%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 211 100% 50%;
+    --border: 160 12% 20%;
+    --input: 160 12% 20%;
+    --ring: 150 100% 50%;
     --radius: 1rem;
   }
 
   .dark {
-    --background: 0 0% 7%;
-    --foreground: 0 0% 96%;
-    --card: 0 0% 11%;
-    --card-foreground: 0 0% 96%;
-    --popover: 0 0% 9%;
-    --popover-foreground: 0 0% 96%;
-    --primary: 211 100% 56%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 16%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 16%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 243 75% 70%;
-    --accent-foreground: 0 0% 100%;
-    --success: 142 60% 50%;
-    --success-foreground: 0 0% 100%;
-    --warning: 35 100% 55%;
-    --warning-foreground: 0 0% 100%;
-    --destructive: 4 90% 63%;
+    /* Same palette - dark is the only mode, kept for components that key
+       off .dark explicitly. */
+    --background: 160 20% 5%;
+    --foreground: 120 30% 96%;
+    --card: 160 15% 9%;
+    --card-foreground: 120 30% 96%;
+    --popover: 160 18% 7%;
+    --popover-foreground: 120 30% 96%;
+    --primary: 150 100% 50%;
+    --primary-foreground: 160 40% 6%;
+    --secondary: 160 12% 14%;
+    --secondary-foreground: 120 20% 92%;
+    --muted: 160 12% 14%;
+    --muted-foreground: 150 8% 62%;
+    --accent: 174 100% 45%;
+    --accent-foreground: 160 40% 6%;
+    --success: 150 100% 50%;
+    --success-foreground: 160 40% 6%;
+    --warning: 45 100% 55%;
+    --warning-foreground: 160 40% 6%;
+    --destructive: 346 100% 62%;
     --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 20%;
-    --input: 0 0% 20%;
-    --ring: 211 100% 56%;
+    --border: 160 12% 20%;
+    --input: 160 12% 20%;
+    --ring: 150 100% 50%;
+  }
+
+  html {
+    color-scheme: dark;
   }
 }
 
@@ -64,5 +72,14 @@
   }
   .safe-bottom {
     padding-bottom: env(safe-area-inset-bottom);
+  }
+  .glow-primary {
+    box-shadow: 0 0 16px hsl(var(--primary) / 0.5), 0 0 2px hsl(var(--primary) / 0.8);
+  }
+  .glow-text {
+    text-shadow: 0 0 20px hsl(var(--primary) / 0.6);
+  }
+  .glow-border {
+    box-shadow: 0 0 0 1px hsl(var(--primary) / 0.4), 0 0 14px hsl(var(--primary) / 0.35);
   }
 }

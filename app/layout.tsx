@@ -10,7 +10,7 @@ export const metadata: Metadata = {
     initialScale: 1,
     viewportFit: "cover",
   },
-  themeColor: "#ffffff",
+  themeColor: "#0b1512",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -34,6 +34,9 @@ export default function RootLayout({
             <div className="flex gap-4 text-sm font-medium">
               <Link href="/practice" className="hover:text-primary">
                 Practice
+              </Link>
+              <Link href="/insights" className="hover:text-primary">
+                Insights
               </Link>
               <Link href="/driving-questions" className="hover:text-primary">
                 Browse
