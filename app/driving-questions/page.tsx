@@ -1,4 +1,5 @@
 import Link from "next/link";
+import QuestionMedia from "@/components/QuestionMedia";
 import {
   getAllQuestions,
   groupByPoints,
@@ -16,6 +17,21 @@ interface PageProps {
   searchParams: { order?: string; lang?: string };
 }
 
+function pointsBadgeClass(points: number) {
+  switch (points) {
+    case 2:
+      return "bg-secondary text-secondary-foreground";
+    case 3:
+      return "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300";
+    case 4:
+      return "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300";
+    case 5:
+      return "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300";
+    default:
+      return "bg-secondary text-secondary-foreground";
+  }
+}
+
 export default async function DrivingQuestionsPage({ searchParams }: PageProps) {
   const order = searchParams.order === "asc" ? "asc" : "desc";
   const lang: Language = searchParams.lang === "en" ? "en" : "de";
@@ -28,17 +44,20 @@ export default async function DrivingQuestionsPage({ searchParams }: PageProps) 
   const otherLang = lang === "de" ? "en" : "de";
 
   return (
-    <main className="max-w-4xl mx-auto p-6">
-      <div className="flex items-center justify-between mb-2">
-        <h1 className="text-2xl font-bold">
-          German Driving Theory Questions — sorted by points
+    <main className="max-w-3xl mx-auto w-full px-4 py-6">
+      <div className="flex items-center justify-between mb-2 gap-2">
+        <h1 className="text-xl sm:text-2xl font-bold">
+          All questions — sorted by points
         </h1>
-        <Link href="/practice" className="text-sm underline text-gray-500 whitespace-nowrap">
-          Practice mode →
+        <Link
+          href="/practice"
+          className="text-sm font-medium border border-border rounded-full px-3 py-1.5 whitespace-nowrap hover:bg-secondary"
+        >
+          Practice →
         </Link>
       </div>
-      <p className="text-sm text-gray-500 mb-4">
-        {all.length} questions total, sourced live from{" "}
+      <p className="text-sm text-muted-foreground mb-4">
+        {all.length} questions, sourced live from{" "}
         <a
           className="underline"
           href="https://github.com/yowmamasita/driving-theory"
@@ -51,32 +70,38 @@ export default async function DrivingQuestionsPage({ searchParams }: PageProps) 
         back to its original source.
       </p>
 
-      <div className="flex gap-4 mb-6 text-sm">
+      <div className="flex flex-wrap gap-2 mb-6 text-sm">
         <Link
-          className="border rounded-md px-3 py-1 hover:bg-gray-100"
+          className="border border-border rounded-full px-3 py-1.5 hover:bg-secondary"
           href={`/driving-questions?order=${otherOrder}&lang=${lang}`}
         >
-          Sort: {order === "desc" ? "highest → lowest" : "lowest → highest"} (click to reverse)
+          Sort: {order === "desc" ? "highest → lowest" : "lowest → highest"}
         </Link>
         <Link
-          className="border rounded-md px-3 py-1 hover:bg-gray-100"
+          className="border border-border rounded-full px-3 py-1.5 hover:bg-secondary"
           href={`/driving-questions?order=${order}&lang=${otherLang}`}
         >
-          Language: {lang.toUpperCase()} (switch to {otherLang.toUpperCase()})
+          {lang.toUpperCase()} → {otherLang.toUpperCase()}
         </Link>
       </div>
 
       {Array.from(grouped.entries()).map(([points, questions]: [number, DrivingQuestion[]]) => (
         <section key={points} className="mb-8">
-          <h2 className="text-lg font-semibold border-b pb-1 mb-3">
-            {points} {points === 1 ? "Punkt" : "Punkte"} ({questions.length} questions)
+          <h2 className="flex items-center gap-2 text-lg font-semibold border-b border-border pb-2 mb-3">
+            <span className={`px-2 py-0.5 rounded-full text-sm ${pointsBadgeClass(points)}`}>
+              {points} {points === 1 ? "Punkt" : "Punkte"}
+            </span>
+            <span className="text-sm font-normal text-muted-foreground">
+              {questions.length} questions
+            </span>
           </h2>
-          <ol className="space-y-4">
+          <ol className="space-y-3">
             {questions.map((q: DrivingQuestion) => (
-              <li key={q.question_id} className="border rounded-md p-3">
-                <div className="text-xs text-gray-400 mb-1">
+              <li key={q.question_id} className="rounded-2xl border border-border bg-card shadow-sm p-4">
+                <div className="text-xs text-muted-foreground mb-2">
                   {q.question_number} · {q.theme_name}
                 </div>
+                <QuestionMedia imageUrls={q.image_urls} videoUrls={q.video_urls} />
                 <div className="font-medium mb-2">{q.question_text}</div>
                 <ul className="text-sm space-y-1">
                   {q.options.map((opt: QuestionOption) => {
@@ -86,7 +111,7 @@ export default async function DrivingQuestionsPage({ searchParams }: PageProps) 
                     return (
                       <li
                         key={opt.letter}
-                        className={isCorrect ? "font-semibold text-green-700" : ""}
+                        className={isCorrect ? "font-semibold text-success" : ""}
                       >
                         {opt.letter} {opt.text}
                       </li>
@@ -98,7 +123,7 @@ export default async function DrivingQuestionsPage({ searchParams }: PageProps) 
                     href={q.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-xs underline text-gray-400"
+                    className="text-xs underline text-muted-foreground"
                   >
                     source
                   </a>

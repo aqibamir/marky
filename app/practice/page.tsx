@@ -1,11 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import QuestionMedia from "@/components/QuestionMedia";
 import type { DrivingQuestion, Language } from "@/lib/drivingQuestions";
 
 type SortBy = "points-desc" | "points-asc" | "theme" | "chapter" | "random";
+type PointsFilter = "all" | "2" | "3" | "4" | "5";
 
 interface AnswerRecord {
   selected: string[];
@@ -59,17 +62,40 @@ function seededShuffle<T>(items: T[], seed: number): T[] {
   return arr;
 }
 
-export default function PracticePage() {
+function pointsBadgeClass(points: number) {
+  switch (points) {
+    case 2:
+      return "bg-secondary text-secondary-foreground";
+    case 3:
+      return "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300";
+    case 4:
+      return "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300";
+    case 5:
+      return "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300";
+    default:
+      return "bg-secondary text-secondary-foreground";
+  }
+}
+
+function PracticeInner() {
+  const searchParams = useSearchParams();
+  const initialPoints = searchParams.get("points");
+
   const [lang, setLang] = useState<Language>("de");
   const [allQuestions, setAllQuestions] = useState<DrivingQuestion[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [sortBy, setSortBy] = useState<SortBy>("points-desc");
-  const [filterPoints, setFilterPoints] = useState<"all" | "2" | "3" | "4" | "5">("all");
+  const [filterPoints, setFilterPoints] = useState<PointsFilter>(
+    initialPoints && ["2", "3", "4", "5"].includes(initialPoints)
+      ? (initialPoints as PointsFilter)
+      : "all"
+  );
   const [filterTheme, setFilterTheme] = useState<string>("all");
   const [onlyUnanswered, setOnlyUnanswered] = useState(false);
   const [onlyIncorrect, setOnlyIncorrect] = useState(false);
   const [shuffleSeed, setShuffleSeed] = useState(1);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<string[]>([]);
@@ -207,132 +233,159 @@ export default function PracticePage() {
 
   if (loadError) {
     return (
-      <main className="max-w-3xl mx-auto p-6">
-        <p className="text-red-600">Failed to load questions: {loadError}</p>
+      <main className="max-w-2xl mx-auto p-4">
+        <p className="text-destructive">Failed to load questions: {loadError}</p>
       </main>
     );
   }
 
   if (!allQuestions) {
     return (
-      <main className="max-w-3xl mx-auto p-6">
-        <p className="text-gray-500">Loading questions…</p>
+      <main className="max-w-2xl mx-auto p-4">
+        <p className="text-muted-foreground animate-pulse">Loading questions…</p>
       </main>
     );
   }
 
+  const isCorrectAnswer =
+    current && sameAnswer(selected, current.correct_answers.map((c) => c.letter));
+  const progressPct = total > 0 ? ((index + 1) / total) * 100 : 0;
+
   return (
-    <main className="max-w-3xl mx-auto p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold">Driving Theory Practice</h1>
-        <Link href="/driving-questions" className="text-sm underline text-gray-500">
-          Browse full list
-        </Link>
+    <main className="max-w-2xl mx-auto w-full px-4 pt-4 pb-28 flex-1">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h1 className="text-xl font-bold">Practice</h1>
+          <p className="text-xs text-muted-foreground">
+            {answeredCount} answered · {correctCount} correct
+            {answeredCount > 0 && ` · ${Math.round((correctCount / answeredCount) * 100)}%`}
+          </p>
+        </div>
+        <button
+          onClick={() => setFiltersOpen((o) => !o)}
+          className="text-sm font-medium border border-border rounded-full px-3 py-1.5 hover:bg-secondary"
+        >
+          {filtersOpen ? "Hide filters" : "Filters"}
+        </button>
       </div>
 
-      <div className="text-sm text-gray-500 mb-4">
-        {answeredCount} answered · {correctCount} correct
-        {answeredCount > 0 && ` (${Math.round((correctCount / answeredCount) * 100)}%)`}
-      </div>
+      {filtersOpen && (
+        <div className="grid grid-cols-2 gap-3 mb-4 text-sm bg-secondary/60 rounded-2xl p-3">
+          <label className="flex flex-col gap-1">
+            Language
+            <select
+              className="border border-border rounded-lg p-2 bg-background"
+              value={lang}
+              onChange={(e) => setLang(e.target.value as Language)}
+            >
+              <option value="de">German</option>
+              <option value="en">English</option>
+            </select>
+          </label>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6 text-sm">
-        <label className="flex flex-col gap-1">
-          Language
-          <select
-            className="border rounded-md p-2"
-            value={lang}
-            onChange={(e) => setLang(e.target.value as Language)}
-          >
-            <option value="de">German</option>
-            <option value="en">English</option>
-          </select>
-        </label>
+          <label className="flex flex-col gap-1">
+            Sort by
+            <select
+              className="border border-border rounded-lg p-2 bg-background"
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as SortBy)}
+            >
+              <option value="points-desc">Points (high → low)</option>
+              <option value="points-asc">Points (low → high)</option>
+              <option value="theme">Theme (A → Z)</option>
+              <option value="chapter">Chapter</option>
+              <option value="random">Random</option>
+            </select>
+          </label>
 
-        <label className="flex flex-col gap-1">
-          Sort by
-          <select
-            className="border rounded-md p-2"
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as SortBy)}
-          >
-            <option value="points-desc">Points (high → low)</option>
-            <option value="points-asc">Points (low → high)</option>
-            <option value="theme">Theme (A → Z)</option>
-            <option value="chapter">Chapter</option>
-            <option value="random">Random</option>
-          </select>
-        </label>
+          <label className="flex flex-col gap-1">
+            Points
+            <select
+              className="border border-border rounded-lg p-2 bg-background"
+              value={filterPoints}
+              onChange={(e) => setFilterPoints(e.target.value as PointsFilter)}
+            >
+              <option value="all">All</option>
+              <option value="2">2 Punkte</option>
+              <option value="3">3 Punkte</option>
+              <option value="4">4 Punkte</option>
+              <option value="5">5 Punkte</option>
+            </select>
+          </label>
 
-        <label className="flex flex-col gap-1">
-          Points filter
-          <select
-            className="border rounded-md p-2"
-            value={filterPoints}
-            onChange={(e) => setFilterPoints(e.target.value as typeof filterPoints)}
-          >
-            <option value="all">All</option>
-            <option value="2">2 Punkte</option>
-            <option value="3">3 Punkte</option>
-            <option value="4">4 Punkte</option>
-            <option value="5">5 Punkte</option>
-          </select>
-        </label>
+          <label className="flex flex-col gap-1">
+            Theme
+            <select
+              className="border border-border rounded-lg p-2 bg-background"
+              value={filterTheme}
+              onChange={(e) => setFilterTheme(e.target.value)}
+            >
+              <option value="all">All themes</option>
+              {themes.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </label>
 
-        <label className="flex flex-col gap-1 col-span-2 sm:col-span-1">
-          Theme filter
-          <select
-            className="border rounded-md p-2"
-            value={filterTheme}
-            onChange={(e) => setFilterTheme(e.target.value)}
-          >
-            <option value="all">All themes</option>
-            {themes.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-        </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={onlyUnanswered}
+              onChange={(e) => setOnlyUnanswered(e.target.checked)}
+            />
+            Unanswered only
+          </label>
 
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={onlyUnanswered}
-            onChange={(e) => setOnlyUnanswered(e.target.checked)}
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={onlyIncorrect}
+              onChange={(e) => setOnlyIncorrect(e.target.checked)}
+            />
+            Missed only
+          </label>
+
+          {sortBy === "random" && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="col-span-2"
+              onClick={() => setShuffleSeed((s) => s + 1)}
+            >
+              Reshuffle
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* progress bar */}
+      {total > 0 && (
+        <div className="h-1.5 rounded-full bg-secondary mb-4 overflow-hidden">
+          <div
+            className="h-full bg-primary transition-all"
+            style={{ width: `${progressPct}%` }}
           />
-          Unanswered only
-        </label>
-
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={onlyIncorrect}
-            onChange={(e) => setOnlyIncorrect(e.target.checked)}
-          />
-          Missed only
-        </label>
-      </div>
-
-      {sortBy === "random" && (
-        <Button variant="outline" size="sm" className="mb-4" onClick={() => setShuffleSeed((s) => s + 1)}>
-          Reshuffle
-        </Button>
+        </div>
       )}
 
       {total === 0 && (
-        <p className="text-gray-500">No questions match the current filters.</p>
+        <p className="text-muted-foreground">No questions match the current filters.</p>
       )}
 
       {current && (
-        <div className="border rounded-md p-4">
-          <div className="flex justify-between text-xs text-gray-400 mb-2">
+        <div className="rounded-2xl border border-border bg-card shadow-sm p-4">
+          <div className="flex justify-between items-center text-xs text-muted-foreground mb-3">
             <span>
               Question {index + 1} of {total}
             </span>
-            <span>
-              {current.points} · {current.theme_name}
+            <span className={`px-2 py-0.5 rounded-full font-medium ${pointsBadgeClass(current.pointsValue)}`}>
+              {current.points}
             </span>
           </div>
+
+          <QuestionMedia imageUrls={current.image_urls} videoUrls={current.video_urls} />
 
           <div className="font-medium mb-3">{current.question_text}</div>
 
@@ -342,17 +395,17 @@ export default function PracticePage() {
               const isCorrectOpt = current.correct_answers.some(
                 (c) => c.letter === opt.letter
               );
-              let style = "border-gray-200";
+              let style = "border-border";
               if (checked) {
-                if (isCorrectOpt) style = "border-green-500 bg-green-50";
-                else if (isSelected) style = "border-red-500 bg-red-50";
+                if (isCorrectOpt) style = "border-success bg-success/10";
+                else if (isSelected) style = "border-destructive bg-destructive/10";
               } else if (isSelected) {
-                style = "border-stone-900";
+                style = "border-primary bg-primary/5";
               }
               return (
                 <label
                   key={opt.letter}
-                  className={`flex items-start gap-2 border rounded-md p-2 cursor-pointer ${style}`}
+                  className={`flex items-start gap-2 border-2 rounded-xl p-3 cursor-pointer transition-colors ${style}`}
                 >
                   <input
                     type={current.correct_answers.length > 1 ? "checkbox" : "radio"}
@@ -370,24 +423,16 @@ export default function PracticePage() {
           </div>
 
           {!checked ? (
-            <Button onClick={checkAnswer} disabled={selected.length === 0}>
+            <Button className="w-full" onClick={checkAnswer} disabled={selected.length === 0}>
               Check answer
             </Button>
           ) : (
-            <div className="mb-3">
-              <p
-                className={
-                  sameAnswer(selected, current.correct_answers.map((c) => c.letter))
-                    ? "text-green-700 font-medium"
-                    : "text-red-700 font-medium"
-                }
-              >
-                {sameAnswer(selected, current.correct_answers.map((c) => c.letter))
-                  ? "Correct!"
-                  : "Not quite."}
+            <div className="mb-1">
+              <p className={isCorrectAnswer ? "text-success font-semibold" : "text-destructive font-semibold"}>
+                {isCorrectAnswer ? "✓ Correct!" : "✕ Not quite."}
               </p>
               {current.comment && (
-                <p className="text-sm text-gray-500 mt-1 whitespace-pre-wrap">
+                <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">
                   {current.comment}
                 </p>
               )}
@@ -396,35 +441,55 @@ export default function PracticePage() {
                   href={current.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-xs underline text-gray-400"
+                  className="text-xs underline text-muted-foreground"
                 >
                   source
                 </a>
               )}
             </div>
           )}
+        </div>
+      )}
 
-          <div className="flex justify-between mt-4">
+      <div className="mt-4 text-center">
+        <button onClick={resetProgress} className="text-xs text-muted-foreground underline">
+          Reset saved progress ({lang.toUpperCase()})
+        </button>
+      </div>
+
+      {/* sticky bottom nav, mobile-friendly */}
+      {current && (
+        <div className="safe-bottom fixed bottom-0 left-0 right-0 border-t border-border bg-background/95 backdrop-blur">
+          <div className="max-w-2xl mx-auto flex items-center justify-between gap-2 px-4 py-3">
             <Button variant="outline" onClick={() => goTo(-1)} disabled={index === 0}>
-              Previous
+              ← Previous
             </Button>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={jumpToFirstUnanswered}>
-                First unanswered
-              </Button>
-              <Button onClick={() => goTo(1)} disabled={index >= total - 1}>
-                Next
-              </Button>
-            </div>
+            <button
+              onClick={jumpToFirstUnanswered}
+              className="text-xs text-muted-foreground underline hidden sm:block"
+            >
+              First unanswered
+            </button>
+            <Button onClick={() => goTo(1)} disabled={index >= total - 1}>
+              Next →
+            </Button>
           </div>
         </div>
       )}
 
-      <div className="mt-6">
-        <Button variant="ghost" size="sm" onClick={resetProgress}>
-          Reset saved progress ({lang.toUpperCase()})
-        </Button>
+      <div className="mt-3 text-center">
+        <Link href="/driving-questions" className="text-xs underline text-muted-foreground">
+          Browse full list instead
+        </Link>
       </div>
     </main>
+  );
+}
+
+export default function PracticePage() {
+  return (
+    <Suspense fallback={<main className="max-w-2xl mx-auto p-4 text-muted-foreground">Loading…</main>}>
+      <PracticeInner />
+    </Suspense>
   );
 }
