@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import QuestionMedia from "@/components/QuestionMedia";
 import {
+  isNumericAnswerQuestion,
   questionMediaType,
   themeEmoji,
   themeLabel,
@@ -98,6 +99,61 @@ const MODE_INFO: Record<Mode, { label: string; hint: string }> = {
   all: { label: "All", hint: "Everything, regardless of history" },
 };
 
+// Hazard-clip questions play the video first; the question and answer
+// options only appear once the person chooses to move on, at which point
+// the clip is replaced by its still frame.
+function QuestionVideoGate({
+  src,
+  poster,
+  onContinue,
+}: {
+  src: string;
+  poster?: string;
+  onContinue: () => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [ended, setEnded] = useState(false);
+
+  function replay() {
+    const el = videoRef.current;
+    if (el) {
+      el.currentTime = 0;
+      el.play();
+    }
+    setEnded(false);
+  }
+
+  return (
+    <div className="space-y-3">
+      <video
+        ref={videoRef}
+        controls
+        playsInline
+        preload="metadata"
+        poster={poster}
+        onEnded={() => setEnded(true)}
+        className="w-full rounded-xl border border-border bg-black"
+      >
+        <source src={src} />
+      </video>
+      {ended ? (
+        <div className="flex gap-2">
+          <Button variant="outline" className="flex-1" onClick={replay}>
+            ↺ Watch again
+          </Button>
+          <Button className="flex-1" onClick={onContinue}>
+            Go to question →
+          </Button>
+        </div>
+      ) : (
+        <p className="text-xs text-center text-muted-foreground">
+          Watch the clip, then continue to the question.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function PracticeInner() {
   const searchParams = useSearchParams();
 
@@ -110,6 +166,7 @@ function PracticeInner() {
   const [filterTheme, setFilterTheme] = useState<string>("all");
   const [filterChapter, setFilterChapter] = useState<string>("all");
   const [filterMedia, setFilterMedia] = useState<MediaFilter>("all");
+  const [numericOnly, setNumericOnly] = useState(false);
   const [keyword, setKeyword] = useState("");
   const [mode, setMode] = useState<Mode>("new");
   const [shuffleSeed, setShuffleSeed] = useState(1);
@@ -121,6 +178,7 @@ function PracticeInner() {
   const [selected, setSelected] = useState<string[]>([]);
   const [checked, setChecked] = useState(false);
   const [stats, setStats] = useState<StatsMap>({});
+  const [videoStage, setVideoStage] = useState<"gate" | "revealed">("revealed");
 
   // Apply ?points=/?theme=/?media=/?mode= from links (homepage tiles, insights) once.
   useEffect(() => {
@@ -129,11 +187,13 @@ function PracticeInner() {
     const c = searchParams.get("chapter");
     const m = searchParams.get("media");
     const mo = searchParams.get("mode");
+    const num = searchParams.get("numeric");
     if (p && ["2", "3", "4", "5"].includes(p)) setFilterPoints(p as PointsFilter);
     if (t) setFilterTheme(t);
     if (c) setFilterChapter(c);
     if (m && ["video", "image", "none"].includes(m)) setFilterMedia(m as MediaFilter);
     if (mo && ["new", "due", "weak", "all"].includes(mo)) setMode(mo as Mode);
+    if (num === "1") setNumericOnly(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -205,6 +265,9 @@ function PracticeInner() {
     if (filterMedia !== "all") {
       list = list.filter((q) => questionMediaType(q) === filterMedia);
     }
+    if (numericOnly) {
+      list = list.filter(isNumericAnswerQuestion);
+    }
     if (keyword.trim()) {
       const kw = keyword.trim().toLowerCase();
       list = list.filter((q) => q.question_text.toLowerCase().includes(kw));
@@ -225,6 +288,7 @@ function PracticeInner() {
     filterTheme,
     filterChapter,
     filterMedia,
+    numericOnly,
     keyword,
     mode,
     sortBy,
@@ -236,11 +300,16 @@ function PracticeInner() {
 
   // Restore any previous answer for the question now in view (relevant in
   // "weak"/"due"/"all" modes, where a question can already have history).
+  // A hazard-clip question that hasn't been answered yet starts gated on
+  // the video; anything else (or an already-answered video question) goes
+  // straight to the question with its still frame.
   useEffect(() => {
     if (!current) return;
     const prior = lastAttempt(stats[current.question_id]);
     setSelected(prior?.selected ?? []);
     setChecked(Boolean(prior));
+    const hasVideo = (current.video_urls?.length ?? 0) > 0;
+    setVideoStage(hasVideo && !prior ? "gate" : "revealed");
   }, [current?.question_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const total = sessionQueue.length;
@@ -277,18 +346,13 @@ function PracticeInner() {
     setIndex((i) => Math.min(Math.max(i + delta, 0), Math.max(total - 1, 0)));
   }
 
-  function resetProgress() {
-    if (!confirm(`Clear all saved answers for ${lang.toUpperCase()}?`)) return;
-    setStats({});
-    saveStats(lang, {});
-  }
-
   function applySavedFilter(f: SavedFilter) {
     setMode(f.mode as Mode);
     setFilterTheme(f.theme);
     setFilterChapter(f.chapter);
     setFilterMedia(f.media as MediaFilter);
     setFilterPoints(f.points as PointsFilter);
+    setNumericOnly(f.numericOnly ?? false);
     setKeyword(f.keyword);
     setSortBy(f.sortBy as SortBy);
     setFiltersOpen(true);
@@ -305,6 +369,7 @@ function PracticeInner() {
       chapter: filterChapter,
       media: filterMedia,
       points: filterPoints,
+      numericOnly,
       keyword,
       sortBy,
     };
@@ -342,6 +407,7 @@ function PracticeInner() {
     filterChapter !== "all" ? filterChapter : null,
     filterPoints === "all" ? null : `${filterPoints} Punkte`,
     filterMedia === "all" ? null : filterMedia,
+    numericOnly ? "🔢 numeric" : null,
     keyword ? `"${keyword}"` : null,
   ]
     .filter(Boolean)
@@ -503,6 +569,15 @@ function PracticeInner() {
               </select>
             </label>
 
+            <label className="flex items-center gap-2 self-end pb-2">
+              <input
+                type="checkbox"
+                checked={numericOnly}
+                onChange={(e) => setNumericOnly(e.target.checked)}
+              />
+              🔢 Numeric answers only
+            </label>
+
             <label className="flex flex-col gap-1">
               Points
               <select
@@ -587,7 +662,9 @@ function PracticeInner() {
         </div>
       )}
 
-      {current && (
+      {current && (() => {
+        const hasVideo = (current.video_urls?.length ?? 0) > 0;
+        return (
         <div className="rounded-2xl border border-border bg-card shadow-sm p-4">
           <div className="flex justify-between items-center text-xs text-muted-foreground mb-3">
             <span>
@@ -598,7 +675,25 @@ function PracticeInner() {
             </span>
           </div>
 
-          <QuestionMedia imageUrls={current.image_urls} videoUrls={current.video_urls} />
+          {hasVideo && videoStage === "gate" ? (
+            <QuestionVideoGate
+              src={current.video_urls![0]}
+              poster={current.image_urls?.[0]}
+              onContinue={() => setVideoStage("revealed")}
+            />
+          ) : (
+            <>
+              {/* Once revealed, show the clip's still frame as a plain image
+                  rather than the video itself. */}
+              <QuestionMedia imageUrls={current.image_urls} videoUrls={undefined} />
+              {hasVideo && (
+                <button
+                  onClick={() => setVideoStage("gate")}
+                  className="text-xs text-primary underline mb-3 -mt-2 block"
+                >
+                  ▶ Watch clip again
+                </button>
+              )}
 
           <div className="font-medium mb-3">{current.question_text}</div>
 
@@ -661,8 +756,11 @@ function PracticeInner() {
               )}
             </div>
           )}
+            </>
+          )}
         </div>
-      )}
+        );
+      })()}
 
       {total > 0 && isLastQuestion && checked && (
         <div className="mt-4 text-center text-sm text-muted-foreground">
@@ -673,12 +771,6 @@ function PracticeInner() {
           for your patterns.
         </div>
       )}
-
-      <div className="mt-4 text-center">
-        <button onClick={resetProgress} className="text-xs text-muted-foreground underline">
-          Reset saved progress ({lang.toUpperCase()})
-        </button>
-      </div>
 
       {/* sticky bottom nav, mobile-friendly */}
       {current && (

@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   getAllQuestions,
   groupByPoints,
+  isNumericAnswerQuestion,
   questionMediaType,
   themeEmoji,
   themeLabel,
@@ -14,6 +15,7 @@ export default async function Home() {
   const grouped = groupByPoints(questions);
   const videoCount = questions.filter((q) => questionMediaType(q) === "video").length;
   const imageCount = questions.filter((q) => questionMediaType(q) === "image").length;
+  const numericCount = questions.filter(isNumericAnswerQuestion).length;
   const themeCount = new Set(questions.map((q) => q.theme_name)).size;
   const mediaCount = videoCount + imageCount;
 
@@ -75,8 +77,8 @@ export default async function Home() {
             ))}
           </div>
 
-          <h2 className="font-semibold text-lg mb-4">Practice by media</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-8">
+          <h2 className="font-semibold text-lg mb-4">Practice by type</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
             <Link
               href="/practice?media=video"
               className="rounded-2xl p-4 border border-border bg-card hover:shadow-md transition"
@@ -92,6 +94,14 @@ export default async function Home() {
               <div className="text-2xl">🖼️</div>
               <div className="font-medium text-sm mt-1">Picture questions</div>
               <div className="text-xs text-muted-foreground mt-1">{imageCount} questions</div>
+            </Link>
+            <Link
+              href="/practice?numeric=1"
+              className="rounded-2xl p-4 border border-border bg-card hover:shadow-md transition"
+            >
+              <div className="text-2xl">🔢</div>
+              <div className="font-medium text-sm mt-1">Numbers & measurements</div>
+              <div className="text-xs text-muted-foreground mt-1">{numericCount} questions</div>
             </Link>
             <Link
               href="/practice?media=none"

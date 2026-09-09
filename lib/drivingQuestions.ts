@@ -125,3 +125,17 @@ export function themeLabel(theme: string): string {
 export function themeEmoji(theme: string): string {
   return THEME_INFO[theme]?.emoji ?? "📘";
 }
+
+// A question "requires a numerical answer" when its answer options are
+// themselves numbers/measurements (speed, distance, time, quantity, a sign
+// number, ...) rather than descriptive text - e.g. "50 km/h" / "30 km/h" /
+// "20 km/h", or "110" / "112" / "115".
+function looksNumeric(text: string): boolean {
+  return /^[+-]?\d+([.,]\d+)?/.test(text.trim());
+}
+
+export function isNumericAnswerQuestion(q: RawDrivingQuestion): boolean {
+  if (q.options.length < 2) return false;
+  const numericCount = q.options.filter((o) => looksNumeric(o.text)).length;
+  return numericCount >= Math.max(2, q.options.length - 1);
+}

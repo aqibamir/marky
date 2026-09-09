@@ -188,6 +188,7 @@ export interface SavedFilter {
   chapter: string;
   media: string;
   points: string;
+  numericOnly?: boolean;
   keyword: string;
   sortBy: string;
 }
