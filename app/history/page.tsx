@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   chapterEmoji,
@@ -20,10 +20,19 @@ import {
   saveStats,
   type StatsMap,
 } from "@/lib/practiceStats";
+import {
+  accuracyTrend,
+  completedRuns,
+  loadRuns,
+  runScore,
+  runWrongIds,
+  type PracticeRun,
+} from "@/lib/practiceRuns";
 import { APP_SETTINGS_EVENT, loadAppSettings } from "@/lib/appSettings";
 
 type StatusFilter = "all" | "correct" | "wrong";
 type SortBy = "recent" | "chapter" | "points";
+type Tab = "questions" | "runs";
 
 function timeAgo(ms: number): string {
   const diff = Date.now() - ms;
@@ -37,8 +46,15 @@ function timeAgo(ms: number): string {
   return new Date(ms).toLocaleDateString();
 }
 
-export default function HistoryPage() {
+function accuracyColor(pct: number): string {
+  if (pct >= 80) return "text-success";
+  if (pct >= 50) return "text-warning";
+  return "text-destructive";
+}
+
+function HistoryInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [lang, setLang] = useState<Language>("de");
   const [questions, setQuestions] = useState<DrivingQuestion[] | null>(null);
   const [stats, setStats] = useState<StatsMap>({});
@@ -46,6 +62,16 @@ export default function HistoryPage() {
   const [sortBy, setSortBy] = useState<SortBy>("recent");
   const [keyword, setKeyword] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const [tab, setTab] = useState<Tab>("questions");
+  const [runs, setRuns] = useState<PracticeRun[]>([]);
+  const [openRunId, setOpenRunId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const t = searchParams.get("tab");
+    if (t === "runs") setTab("runs");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     setLang(loadAppSettings().lang);
@@ -63,6 +89,7 @@ export default function HistoryPage() {
       .then((d) => setQuestions(d.questions));
     setStats(loadStats(lang));
     setSelected(new Set());
+    setRuns(loadRuns(lang));
   }, [lang]);
 
   const byId = useMemo(() => {
@@ -108,6 +135,26 @@ export default function HistoryPage() {
   const totalAnswered = Object.keys(stats).length;
   const totalCorrect = Object.values(stats).filter((s) => lastAttempt(s)?.correct).length;
 
+  const runsList = useMemo(
+    () => completedRuns(runs).sort((a, b) => b.startedAt - a.startedAt),
+    [runs]
+  );
+  const trend = useMemo(() => accuracyTrend(runs), [runs]);
+  const trendMessage = useMemo(() => {
+    if (trend.length < 2) return null;
+    const half = Math.max(1, Math.floor(trend.length / 2));
+    const earlier = trend.slice(0, half);
+    const recent = trend.slice(-half);
+    const avg = (xs: typeof trend) => xs.reduce((s, x) => s + x.accuracy, 0) / xs.length;
+    const earlierAvg = avg(earlier);
+    const recentAvg = avg(recent);
+    const diff = Math.round((recentAvg - earlierAvg) * 100);
+    if (Math.abs(diff) < 3) return "Your accuracy has stayed about the same across your recent runs.";
+    return diff > 0
+      ? `📈 You're improving — accuracy is up ${diff} points versus your earlier runs.`
+      : `📉 Accuracy has dropped ${Math.abs(diff)} points versus your earlier runs — worth revisiting your weak topics.`;
+  }, [trend]);
+
   function toggle(id: string) {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -128,6 +175,13 @@ export default function HistoryPage() {
   function practiceSelected() {
     if (selected.size === 0) return;
     saveSelectedSessionIds(Array.from(selected));
+    router.push("/practice?mode=selected");
+  }
+
+  function practiceRunWrong(run: PracticeRun) {
+    const ids = runWrongIds(run);
+    if (ids.length === 0) return;
+    saveSelectedSessionIds(ids);
     router.push("/practice?mode=selected");
   }
 
@@ -168,102 +222,233 @@ export default function HistoryPage() {
         {totalAnswered} answered · {totalCorrect} correct
       </p>
 
-      {totalAnswered === 0 ? (
+      <div className="grid grid-cols-2 gap-1 bg-secondary rounded-full p-1 mb-4">
+        <button
+          onClick={() => setTab("questions")}
+          className={`rounded-full py-1.5 text-sm font-medium transition-colors ${
+            tab === "questions" ? "bg-primary text-primary-foreground glow-primary" : "hover:bg-background/60"
+          }`}
+        >
+          Questions
+        </button>
+        <button
+          onClick={() => setTab("runs")}
+          className={`rounded-full py-1.5 text-sm font-medium transition-colors ${
+            tab === "runs" ? "bg-primary text-primary-foreground glow-primary" : "hover:bg-background/60"
+          }`}
+        >
+          Runs {runsList.length > 0 && `(${runsList.length})`}
+        </button>
+      </div>
+
+      {tab === "questions" ? (
+        totalAnswered === 0 ? (
+          <div className="text-center py-16">
+            <p className="text-lg font-medium mb-1">Nothing here yet</p>
+            <p className="text-sm text-muted-foreground mb-4">
+              Answer some questions in Practice and they&rsquo;ll show up here.
+            </p>
+            <Link href="/practice" className="text-primary underline text-sm">
+              Start practicing →
+            </Link>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-2 mb-3 text-sm">
+              <select
+                className="border border-border rounded-lg p-2 bg-background"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+              >
+                <option value="all">All results</option>
+                <option value="correct">✓ Correct only</option>
+                <option value="wrong">✕ Wrong only</option>
+              </select>
+              <select
+                className="border border-border rounded-lg p-2 bg-background"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortBy)}
+              >
+                <option value="recent">Most recent</option>
+                <option value="chapter">By chapter</option>
+                <option value="points">By points</option>
+              </select>
+            </div>
+            <input
+              type="text"
+              placeholder="Search your answered questions..."
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              className="w-full border border-border rounded-lg p-2 bg-background text-sm mb-3"
+            />
+
+            <div className="flex items-center justify-between mb-3 text-xs">
+              <div className="flex gap-3">
+                <button onClick={selectAllVisible} className="underline text-primary">
+                  Select all ({rows.length})
+                </button>
+                {selected.size > 0 && (
+                  <button onClick={clearSelection} className="underline text-muted-foreground">
+                    Clear selection
+                  </button>
+                )}
+              </div>
+              <span className="text-muted-foreground">{rows.length} shown</span>
+            </div>
+
+            <ul className="space-y-2">
+              {rows.map(({ q, stat, id }) => {
+                const last = lastAttempt(stat);
+                const correct = last?.correct;
+                return (
+                  <li
+                    key={id}
+                    className={`rounded-xl border p-3 flex gap-3 items-start cursor-pointer transition-colors ${
+                      selected.has(id)
+                        ? "border-primary bg-primary/5"
+                        : "border-border bg-card"
+                    }`}
+                    onClick={() => toggle(id)}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selected.has(id)}
+                      onChange={() => toggle(id)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="mt-1 shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1 flex-wrap">
+                        <span className={correct ? "text-success" : "text-destructive"}>
+                          {correct ? "✓" : "✕"}
+                        </span>
+                        <span>{q.points}</span>
+                        <span>·</span>
+                        <span>
+                          {themeEmoji(q.theme_name)} {themeLabel(q.theme_name)}
+                        </span>
+                        <span>·</span>
+                        <span>{last && timeAgo(last.at)}</span>
+                        {stat.wrongCount > 1 && (
+                          <span className="text-destructive">· missed {stat.wrongCount}×</span>
+                        )}
+                      </div>
+                      <p className="text-sm truncate">{q.question_text}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {chapterEmoji(q.chapter_name)} {chapterLabel(q.chapter_name)}
+                      </p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )
+      ) : runsList.length === 0 ? (
         <div className="text-center py-16">
-          <p className="text-lg font-medium mb-1">Nothing here yet</p>
+          <p className="text-lg font-medium mb-1">No runs yet</p>
           <p className="text-sm text-muted-foreground mb-4">
-            Answer some questions in Practice and they&rsquo;ll show up here.
+            Every time you practice, it&rsquo;s saved here as its own run — so you can
+            see the ones you got wrong and drill just those.
           </p>
           <Link href="/practice" className="text-primary underline text-sm">
-            Start practicing →
+            Start a run →
           </Link>
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-2 mb-3 text-sm">
-            <select
-              className="border border-border rounded-lg p-2 bg-background"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-            >
-              <option value="all">All results</option>
-              <option value="correct">✓ Correct only</option>
-              <option value="wrong">✕ Wrong only</option>
-            </select>
-            <select
-              className="border border-border rounded-lg p-2 bg-background"
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as SortBy)}
-            >
-              <option value="recent">Most recent</option>
-              <option value="chapter">By chapter</option>
-              <option value="points">By points</option>
-            </select>
-          </div>
-          <input
-            type="text"
-            placeholder="Search your answered questions..."
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            className="w-full border border-border rounded-lg p-2 bg-background text-sm mb-3"
-          />
-
-          <div className="flex items-center justify-between mb-3 text-xs">
-            <div className="flex gap-3">
-              <button onClick={selectAllVisible} className="underline text-primary">
-                Select all ({rows.length})
-              </button>
-              {selected.size > 0 && (
-                <button onClick={clearSelection} className="underline text-muted-foreground">
-                  Clear selection
-                </button>
-              )}
+          {trendMessage && (
+            <div className="rounded-xl border border-border bg-card p-3 mb-3">
+              <p className="text-sm">{trendMessage}</p>
+              <div className="flex items-end gap-1 mt-2 h-10">
+                {trend.slice(-20).map(({ run, accuracy }) => (
+                  <div
+                    key={run.id}
+                    title={`${Math.round(accuracy * 100)}% on ${new Date(run.startedAt).toLocaleDateString()}`}
+                    className={`flex-1 rounded-t ${
+                      accuracy >= 0.8 ? "bg-success" : accuracy >= 0.5 ? "bg-warning" : "bg-destructive"
+                    }`}
+                    style={{ height: `${Math.max(8, accuracy * 100)}%` }}
+                  />
+                ))}
+              </div>
             </div>
-            <span className="text-muted-foreground">{rows.length} shown</span>
-          </div>
+          )}
 
           <ul className="space-y-2">
-            {rows.map(({ q, stat, id }) => {
-              const last = lastAttempt(stat);
-              const correct = last?.correct;
+            {runsList.map((run) => {
+              const { answered, correct, accuracy } = runScore(run);
+              const wrongIds = runWrongIds(run);
+              const pct = Math.round(accuracy * 100);
+              const isOpen = openRunId === run.id;
               return (
-                <li
-                  key={id}
-                  className={`rounded-xl border p-3 flex gap-3 items-start cursor-pointer transition-colors ${
-                    selected.has(id)
-                      ? "border-primary bg-primary/5"
-                      : "border-border bg-card"
-                  }`}
-                  onClick={() => toggle(id)}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selected.has(id)}
-                    onChange={() => toggle(id)}
-                    onClick={(e) => e.stopPropagation()}
-                    className="mt-1 shrink-0"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1 flex-wrap">
-                      <span className={correct ? "text-success" : "text-destructive"}>
-                        {correct ? "✓" : "✕"}
-                      </span>
-                      <span>{q.points}</span>
-                      <span>·</span>
-                      <span>
-                        {themeEmoji(q.theme_name)} {themeLabel(q.theme_name)}
-                      </span>
-                      <span>·</span>
-                      <span>{last && timeAgo(last.at)}</span>
-                      {stat.wrongCount > 1 && (
-                        <span className="text-destructive">· missed {stat.wrongCount}×</span>
+                <li key={run.id} className="rounded-xl border border-border bg-card overflow-hidden">
+                  <button
+                    className="w-full text-left p-3 flex items-center justify-between gap-3"
+                    onClick={() => setOpenRunId(isOpen ? null : run.id)}
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{run.filterSummary || "Practice run"}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {timeAgo(run.startedAt)} · {answered} answered
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className={`text-lg font-bold ${accuracyColor(pct)}`}>{pct}%</p>
+                      <p className="text-xs text-muted-foreground">
+                        {correct}/{answered} correct
+                      </p>
+                    </div>
+                  </button>
+
+                  {isOpen && (
+                    <div className="border-t border-border p-3 space-y-3">
+                      {wrongIds.length === 0 ? (
+                        <p className="text-sm text-success">🎉 Perfect run — nothing wrong to review.</p>
+                      ) : (
+                        <>
+                          <Button size="sm" className="w-full" onClick={() => practiceRunWrong(run)}>
+                            🔁 Practice these {wrongIds.length} wrong ones again
+                          </Button>
+                          <ul className="space-y-2">
+                            {run.answers
+                              .filter((a) => !a.correct)
+                              .map((a) => {
+                                const q = byId.get(a.questionId);
+                                if (!q) return null;
+                                const selectedText = a.selected
+                                  .map(
+                                    (l) => q.options.find((o) => o.letter === l)?.text ?? l
+                                  )
+                                  .join(", ");
+                                const correctText = q.correct_answers
+                                  .map((c) => c.text || c.letter)
+                                  .join(", ");
+                                return (
+                                  <li
+                                    key={a.questionId}
+                                    className="rounded-lg bg-secondary/50 p-2.5 text-sm"
+                                  >
+                                    <p className="font-medium mb-1">{q.question_text}</p>
+                                    <p className="text-xs text-destructive mb-0.5">
+                                      ✕ You answered: {selectedText || "—"}
+                                    </p>
+                                    <p className="text-xs text-success mb-1">
+                                      ✓ Correct: {correctText}
+                                    </p>
+                                    {q.comment && (
+                                      <p className="text-xs text-muted-foreground whitespace-pre-wrap">
+                                        📖 {q.comment}
+                                      </p>
+                                    )}
+                                  </li>
+                                );
+                              })}
+                          </ul>
+                        </>
                       )}
                     </div>
-                    <p className="text-sm truncate">{q.question_text}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {chapterEmoji(q.chapter_name)} {chapterLabel(q.chapter_name)}
-                    </p>
-                  </div>
+                  )}
                 </li>
               );
             })}
@@ -271,7 +456,7 @@ export default function HistoryPage() {
         </>
       )}
 
-      {selected.size > 0 && (
+      {tab === "questions" && selected.size > 0 && (
         <div className="safe-bottom fixed bottom-0 left-0 right-0 border-t border-border bg-background/95 backdrop-blur">
           <div className="max-w-2xl mx-auto flex items-center justify-between gap-2 px-4 py-3">
             <Button variant="outline" onClick={forgetSelected}>
@@ -284,5 +469,13 @@ export default function HistoryPage() {
         </div>
       )}
     </main>
+  );
+}
+
+export default function HistoryPage() {
+  return (
+    <Suspense fallback={<main className="max-w-2xl mx-auto p-4 text-muted-foreground">Loading…</main>}>
+      <HistoryInner />
+    </Suspense>
   );
 }

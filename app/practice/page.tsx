@@ -36,6 +36,8 @@ import {
   type SavedFilter,
   type StatsMap,
 } from "@/lib/practiceStats";
+import { appendRunAnswer, startRun } from "@/lib/practiceRuns";
+import { getTheoryNotesForTags } from "@/lib/theoryNotes";
 import { APP_SETTINGS_EVENT, loadAppSettings } from "@/lib/appSettings";
 
 type SortBy = "points-desc" | "points-asc" | "theme" | "chapter" | "random";
@@ -181,6 +183,54 @@ function QuestionVideoGate({
   );
 }
 
+// Shared between the filter summary shown in the UI and the description
+// saved onto a practice run record, so a run's history entry reads the same
+// as what was on screen when it was taken.
+function buildFilterSummary(opts: {
+  mode: Mode;
+  filterTheme: string;
+  filterChapter: string;
+  filterPoints: PointsFilter;
+  filterMedia: MediaFilter;
+  examPart: ExamPart;
+  licenseClass: LicenseClass;
+  numericOnly: boolean;
+  filterTags: string[];
+  keyword: string;
+}): string {
+  const {
+    mode,
+    filterTheme,
+    filterChapter,
+    filterPoints,
+    filterMedia,
+    examPart,
+    licenseClass,
+    numericOnly,
+    filterTags,
+    keyword,
+  } = opts;
+  return [
+    MODE_INFO[mode].label,
+    filterTheme === "all" ? "All categories" : `${themeEmoji(filterTheme)} ${themeLabel(filterTheme)}`,
+    filterChapter !== "all" ? filterChapter : null,
+    filterPoints === "all" ? null : `${filterPoints} Punkte`,
+    filterMedia === "all" ? null : filterMedia,
+    examPart === "all"
+      ? null
+      : examPart === "grundstoff"
+      ? "Basic knowledge"
+      : licenseClass === "B"
+      ? "Class B specific"
+      : "Class-specific",
+    numericOnly ? "🔢 numeric" : null,
+    filterTags.length > 0 ? filterTags.map(tagLabel).join(" + ") : null,
+    keyword ? `"${keyword}"` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 function PracticeInner() {
   const searchParams = useSearchParams();
 
@@ -223,6 +273,10 @@ function PracticeInner() {
   // again instead of re-displaying a stale locked-in answer from before -
   // the whole point of a review mode is retrying, not just re-reading it.
   const [sessionAnsweredIds, setSessionAnsweredIds] = useState<Set<string>>(new Set());
+  // The practice "run" (see lib/practiceRuns.ts) backing the current queue,
+  // so every answer given can be recorded against it and reviewed later
+  // from History → Runs.
+  const [currentRunId, setCurrentRunId] = useState<string | null>(null);
 
   // Apply ?points=/?theme=/?media=/?mode= from links (homepage tiles, insights) once.
   useEffect(() => {
@@ -363,6 +417,31 @@ function PracticeInner() {
     }
     setSessionQueue(sortList(list, sortBy, shuffleSeed));
     setIndex(0);
+
+    // A fresh queue is a fresh practice run - start (and persist) a new run
+    // record right away so even one abandoned mid-way still has its partial
+    // progress saved, rather than only recording a run once it's finished.
+    if (list.length > 0) {
+      const { runId } = startRun(lang, {
+        mode,
+        filterSummary: buildFilterSummary({
+          mode,
+          filterTheme,
+          filterChapter,
+          filterPoints,
+          filterMedia,
+          examPart,
+          licenseClass,
+          numericOnly,
+          filterTags,
+          keyword,
+        }),
+        queueLength: list.length,
+      });
+      setCurrentRunId(runId);
+    } else {
+      setCurrentRunId(null);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     allQuestions,
@@ -440,6 +519,14 @@ function PracticeInner() {
     saveStats(lang, next);
     setChecked(true);
     setSessionAnsweredIds((prev) => new Set(prev).add(current.question_id));
+    if (currentRunId) {
+      appendRunAnswer(lang, currentRunId, {
+        questionId: current.question_id,
+        selected,
+        correct: isCorrect,
+        at: Date.now(),
+      });
+    }
   }
 
   function goTo(delta: number) {
@@ -505,25 +592,18 @@ function PracticeInner() {
     );
   }
 
-  const filterSummary = [
-    MODE_INFO[mode].label,
-    filterTheme === "all" ? "All categories" : `${themeEmoji(filterTheme)} ${themeLabel(filterTheme)}`,
-    filterChapter !== "all" ? filterChapter : null,
-    filterPoints === "all" ? null : `${filterPoints} Punkte`,
-    filterMedia === "all" ? null : filterMedia,
-    examPart === "all"
-      ? null
-      : examPart === "grundstoff"
-      ? "Basic knowledge"
-      : licenseClass === "B"
-      ? "Class B specific"
-      : "Class-specific",
-    numericOnly ? "🔢 numeric" : null,
-    filterTags.length > 0 ? filterTags.map(tagLabel).join(" + ") : null,
-    keyword ? `"${keyword}"` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const filterSummary = buildFilterSummary({
+    mode,
+    filterTheme,
+    filterChapter,
+    filterPoints,
+    filterMedia,
+    examPart,
+    licenseClass,
+    numericOnly,
+    filterTags,
+    keyword,
+  });
 
   const progressPct = total > 0 ? ((index + 1) / total) * 100 : 0;
 
@@ -1005,6 +1085,22 @@ function PracticeInner() {
                   {current.comment}
                 </p>
               )}
+
+              {!isCorrectAnswer &&
+                appliesToLicenseClass(current, "B") &&
+                getTheoryNotesForTags(getContentTags(current)).map((note, i) => (
+                  <div
+                    key={i}
+                    className="mt-2 rounded-lg bg-primary/5 border border-primary/20 p-2.5"
+                  >
+                    <p className="text-xs font-semibold text-primary mb-1">
+                      🎓 {note.title}
+                    </p>
+                    <p className="text-xs text-muted-foreground whitespace-pre-wrap">
+                      {note.body}
+                    </p>
+                  </div>
+                ))}
               {current.url && (
                 <a
                   href={current.url}
@@ -1025,7 +1121,11 @@ function PracticeInner() {
 
       {total > 0 && isLastQuestion && checked && (
         <div className="mt-4 text-center text-sm text-muted-foreground">
-          That&rsquo;s the last question in this set — nice work! Adjust filters above to keep going, or check{" "}
+          That&rsquo;s the last question in this set — nice work! This run is saved under{" "}
+          <Link href="/history" className="underline text-primary">
+            History → Runs
+          </Link>
+          , where you can redrill anything you got wrong. Adjust filters above to keep going, or check{" "}
           <Link href="/insights" className="underline text-primary">
             Insights
           </Link>{" "}
