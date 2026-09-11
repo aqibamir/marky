@@ -190,6 +190,7 @@ export interface SavedFilter {
   points: string;
   numericOnly?: boolean;
   examPart?: string;
+  tags?: string[];
   keyword: string;
   sortBy: string;
 }
@@ -211,5 +212,35 @@ export function saveSavedFilters(filters: SavedFilter[]) {
     window.localStorage.setItem(SAVED_FILTERS_KEY, JSON.stringify(filters));
   } catch {
     // ignore
+  }
+}
+
+// --- "forget" (remove tracking so a question returns to the New pool) ---
+
+export function forgetQuestions(stats: StatsMap, questionIds: string[]): StatsMap {
+  const next = { ...stats };
+  for (const id of questionIds) delete next[id];
+  return next;
+}
+
+// --- hand-off from the History page to Practice: "redo just these" ---
+
+const SELECTED_SESSION_KEY = "marky:custom-session-ids";
+
+export function saveSelectedSessionIds(ids: string[]) {
+  try {
+    window.localStorage.setItem(SELECTED_SESSION_KEY, JSON.stringify(ids));
+  } catch {
+    // ignore
+  }
+}
+
+export function loadSelectedSessionIds(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(SELECTED_SESSION_KEY);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch {
+    return [];
   }
 }

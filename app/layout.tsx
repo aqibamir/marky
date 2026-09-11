@@ -28,23 +28,30 @@ export default function RootLayout({
     <html lang="en">
       <body className="font-sans antialiased bg-background text-foreground min-h-screen flex flex-col">
         <header className="safe-top sticky top-0 z-20 border-b border-border bg-background/80 backdrop-blur">
-          <nav className="max-w-4xl mx-auto px-4 py-2 flex flex-wrap items-center justify-between gap-2">
-            <Link href="/" className="font-bold tracking-tight">
-              🚗 Driving Theory
-            </Link>
-            <div className="flex gap-4 text-sm font-medium">
-              <Link href="/practice" className="hover:text-primary">
-                Practice
+          <div className="max-w-4xl mx-auto px-2 sm:px-4">
+            <div className="flex items-center justify-between h-14 px-2">
+              <Link href="/" className="font-bold tracking-tight shrink-0">
+                🚗 Driving Theory
               </Link>
-              <Link href="/insights" className="hover:text-primary">
-                Insights
-              </Link>
-              <Link href="/driving-questions" className="hover:text-primary">
-                Browse
-              </Link>
+              <ModeSwitcher />
             </div>
-            <ModeSwitcher />
-          </nav>
+            <nav className="flex text-sm font-medium border-t border-border -mx-2 sm:mx-0">
+              {[
+                ["/practice", "Practice"],
+                ["/history", "History"],
+                ["/insights", "Insights"],
+                ["/driving-questions", "Browse"],
+              ].map(([href, label]) => (
+                <Link
+                  key={href}
+                  href={href}
+                  className="flex-1 text-center py-3 hover:text-primary hover:bg-secondary/50 active:bg-secondary transition-colors"
+                >
+                  {label}
+                </Link>
+              ))}
+            </nav>
+          </div>
         </header>
         <div className="flex-1 flex flex-col">{children}</div>
       </body>

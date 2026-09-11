@@ -7,10 +7,15 @@ import { Button } from "@/components/ui/button";
 import QuestionMedia from "@/components/QuestionMedia";
 import {
   appliesToLicenseClass,
+  chapterLabel,
+  getContentTags,
+  TAG_INFO,
   isFreeEntryQuestion,
   isNumericAnswerQuestion,
   matchesExamPart,
   questionMediaType,
+  tagEmoji,
+  tagLabel,
   themeEmoji,
   themeLabel,
   type DrivingQuestion,
@@ -23,6 +28,7 @@ import {
   isDue,
   lastAttempt,
   loadSavedFilters,
+  loadSelectedSessionIds,
   loadStats,
   recordAttempt,
   saveSavedFilters,
@@ -35,7 +41,9 @@ import { APP_SETTINGS_EVENT, loadAppSettings } from "@/lib/appSettings";
 type SortBy = "points-desc" | "points-asc" | "theme" | "chapter" | "random";
 type PointsFilter = "all" | "2" | "3" | "4" | "5";
 type MediaFilter = "all" | MediaType;
-type Mode = "new" | "due" | "weak" | "all";
+// "selected" isn't user-toggled in the filter panel - it's how the History
+// page hands off a specific set of questions to redo.
+type Mode = "new" | "due" | "weak" | "all" | "selected";
 
 // Typed answers should match regardless of decimal separator or padding:
 // the catalog stores "1,5" but "1.5" (or " 1,50 ") is the same answer.
@@ -112,7 +120,11 @@ const MODE_INFO: Record<Mode, { label: string; hint: string }> = {
   due: { label: "Due", hint: "Spaced-repetition review queue" },
   weak: { label: "Weak spots", hint: "Your most recent answer was wrong" },
   all: { label: "All", hint: "Everything, regardless of history" },
+  selected: { label: "Selected", hint: "A custom set picked from History" },
 };
+// Modes a person can pick directly in the filter panel. "selected" only
+// happens via the History page's "Practice selected" action.
+const VISIBLE_MODES: Mode[] = ["new", "due", "weak", "all"];
 
 // Hazard-clip questions play the video first; the question and answer
 // options only appear once the person chooses to move on, at which point
@@ -182,12 +194,14 @@ function PracticeInner() {
   const [filterTheme, setFilterTheme] = useState<string>("all");
   const [filterChapter, setFilterChapter] = useState<string>("all");
   const [filterMedia, setFilterMedia] = useState<MediaFilter>("all");
+  const [filterTags, setFilterTags] = useState<string[]>([]);
   const [examPart, setExamPart] = useState<ExamPart>("all");
   const [numericOnly, setNumericOnly] = useState(false);
   const [keyword, setKeyword] = useState("");
   const [mode, setMode] = useState<Mode>("new");
   const [shuffleSeed, setShuffleSeed] = useState(1);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
 
   const [sessionQueue, setSessionQueue] = useState<DrivingQuestion[]>([]);
@@ -219,13 +233,15 @@ function PracticeInner() {
     const mo = searchParams.get("mode");
     const num = searchParams.get("numeric");
     const part = searchParams.get("part");
+    const tagsParam = searchParams.get("tags");
     if (p && ["2", "3", "4", "5"].includes(p)) setFilterPoints(p as PointsFilter);
     if (t) setFilterTheme(t);
     if (c) setFilterChapter(c);
     if (m && ["video", "image", "none"].includes(m)) setFilterMedia(m as MediaFilter);
-    if (mo && ["new", "due", "weak", "all"].includes(mo)) setMode(mo as Mode);
+    if (mo && ["new", "due", "weak", "all", "selected"].includes(mo)) setMode(mo as Mode);
     if (num === "1") setNumericOnly(true);
     if (part === "grundstoff" || part === "zusatzstoff") setExamPart(part);
+    if (tagsParam) setFilterTags(tagsParam.split(","));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -277,6 +293,11 @@ function PracticeInner() {
     return Array.from(new Set(allQuestions.map((q) => q.theme_name))).sort();
   }, [allQuestions]);
 
+  const allTags = useMemo(
+    () => Object.keys(TAG_INFO).sort((a, b) => tagLabel(a).localeCompare(tagLabel(b))),
+    []
+  );
+
   const chapters = useMemo(() => {
     if (!allQuestions) return [];
     const pool =
@@ -314,6 +335,9 @@ function PracticeInner() {
     if (filterMedia !== "all") {
       list = list.filter((q) => questionMediaType(q) === filterMedia);
     }
+    if (filterTags.length > 0) {
+      list = list.filter((q) => getContentTags(q).some((t) => filterTags.includes(t)));
+    }
     if (licenseClass !== "all") {
       list = list.filter((q) => appliesToLicenseClass(q, licenseClass));
     }
@@ -333,6 +357,9 @@ function PracticeInner() {
       list = list.filter((q) => isDue(stats[q.question_id]));
     } else if (mode === "weak") {
       list = list.filter((q) => lastAttempt(stats[q.question_id])?.correct === false);
+    } else if (mode === "selected") {
+      const ids = new Set(loadSelectedSessionIds());
+      list = list.filter((q) => ids.has(q.question_id));
     }
     setSessionQueue(sortList(list, sortBy, shuffleSeed));
     setIndex(0);
@@ -343,6 +370,7 @@ function PracticeInner() {
     filterTheme,
     filterChapter,
     filterMedia,
+    filterTags,
     licenseClass,
     examPart,
     numericOnly,
@@ -426,6 +454,7 @@ function PracticeInner() {
     setFilterPoints(f.points as PointsFilter);
     setNumericOnly(f.numericOnly ?? false);
     setExamPart((f.examPart as ExamPart) ?? "all");
+    setFilterTags(f.tags ?? []);
     setKeyword(f.keyword);
     setSortBy(f.sortBy as SortBy);
     setFiltersOpen(true);
@@ -444,6 +473,7 @@ function PracticeInner() {
       points: filterPoints,
       numericOnly,
       examPart,
+      tags: filterTags,
       keyword,
       sortBy,
     };
@@ -489,6 +519,7 @@ function PracticeInner() {
       ? "Class B specific"
       : "Class-specific",
     numericOnly ? "🔢 numeric" : null,
+    filterTags.length > 0 ? filterTags.map(tagLabel).join(" + ") : null,
     keyword ? `"${keyword}"` : null,
   ]
     .filter(Boolean)
@@ -521,220 +552,275 @@ function PracticeInner() {
         </button>
       </div>
 
-      {!filtersOpen && (
-        <button
-          onClick={() => setFiltersOpen(true)}
-          className="w-full text-left text-xs text-muted-foreground bg-secondary/60 border border-border rounded-full px-3 py-2 mb-4 truncate"
-        >
-          {filterSummary}
-        </button>
-      )}
+      <button
+        onClick={() => setFiltersOpen(true)}
+        className="w-full text-left text-xs text-muted-foreground bg-secondary/60 border border-border rounded-full px-3 py-2 mb-4 truncate"
+      >
+        {filterSummary}
+      </button>
 
       {filtersOpen && (
-        <div className="mb-4 bg-card border border-border rounded-2xl p-3 space-y-3 text-sm">
-          {savedFilters.length > 0 && (
+        <div className="fixed inset-0 z-30 bg-background flex flex-col">
+          <div className="safe-top flex items-center justify-between px-4 h-14 border-b border-border shrink-0">
+            <h2 className="font-bold">Filters</h2>
+            <button
+              onClick={() => setFiltersOpen(false)}
+              className="text-sm font-medium text-primary rounded-full px-3 py-1.5 hover:bg-primary/10"
+            >
+              Done
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5 text-sm">
             <div>
-              <div className="text-xs font-semibold text-muted-foreground mb-1.5">My filters</div>
-              <div className="flex flex-wrap gap-1.5">
-                {savedFilters.map((f) => (
-                  <span
-                    key={f.id}
-                    className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs"
+              <div className="text-xs font-semibold text-muted-foreground mb-1.5">Mode</div>
+              <div className="grid grid-cols-4 gap-1 bg-secondary rounded-full p-1">
+                {VISIBLE_MODES.map((m) => (
+                  <button
+                    key={m}
+                    title={MODE_INFO[m].hint}
+                    onClick={() => setMode(m)}
+                    className={`rounded-full py-1.5 text-xs font-medium transition-colors ${
+                      mode === m
+                        ? "bg-primary text-primary-foreground glow-primary"
+                        : "hover:bg-background/60"
+                    }`}
                   >
-                    <button onClick={() => applySavedFilter(f)}>{f.name}</button>
-                    <button
-                      onClick={() => deleteSavedFilter(f.id)}
-                      className="text-muted-foreground hover:text-destructive"
-                      aria-label={`Delete ${f.name}`}
-                    >
-                      ×
-                    </button>
-                  </span>
+                    {MODE_INFO[m].label}
+                  </button>
                 ))}
               </div>
             </div>
-          )}
 
-          <div>
-            <div className="text-xs font-semibold text-muted-foreground mb-1.5">Mode</div>
-            <div className="grid grid-cols-4 gap-1 bg-secondary rounded-full p-1">
-              {(Object.keys(MODE_INFO) as Mode[]).map((m) => (
+            <div>
+              <div className="text-xs font-semibold text-muted-foreground mb-1.5">Category</div>
+              <div className="flex flex-wrap gap-1.5">
                 <button
-                  key={m}
-                  title={MODE_INFO[m].hint}
-                  onClick={() => setMode(m)}
-                  className={`rounded-full py-1.5 text-xs font-medium transition-colors ${
-                    mode === m
-                      ? "bg-primary text-primary-foreground glow-primary"
-                      : "hover:bg-background/60"
-                  }`}
-                >
-                  {MODE_INFO[m].label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <div className="text-xs font-semibold text-muted-foreground mb-1.5">
-              Exam part
-            </div>
-            <div className="grid grid-cols-3 gap-1 bg-secondary rounded-full p-1">
-              {(["all", "grundstoff", "zusatzstoff"] as ExamPart[]).map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setExamPart(p)}
-                  title={
-                    p === "grundstoff"
-                      ? "Grundstoff - basic knowledge, asked in every license class"
-                      : p === "zusatzstoff"
-                      ? "Zusatzstoff - the class-specific half of the exam"
-                      : "Both parts"
-                  }
-                  className={`rounded-full py-1.5 text-xs font-medium transition-colors ${
-                    examPart === p
-                      ? "bg-primary text-primary-foreground glow-primary"
-                      : "hover:bg-background/60"
-                  }`}
-                >
-                  {p === "all"
-                    ? "Both"
-                    : p === "grundstoff"
-                    ? "Basic"
-                    : licenseClass === "B"
-                    ? "Class B"
-                    : "Class-specific"}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <div className="text-xs font-semibold text-muted-foreground mb-1.5">Category</div>
-            <div className="flex flex-wrap gap-1.5">
-              <button
-                onClick={() => setFilterTheme("all")}
-                className={`rounded-full px-3 py-1 text-xs border ${
-                  filterTheme === "all"
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-background border-border"
-                }`}
-              >
-                All
-              </button>
-              {themes.map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setFilterTheme(t)}
+                  onClick={() => setFilterTheme("all")}
                   className={`rounded-full px-3 py-1 text-xs border ${
-                    filterTheme === t
+                    filterTheme === "all"
                       ? "bg-primary text-primary-foreground border-primary"
                       : "bg-background border-border"
                   }`}
                 >
-                  {themeEmoji(t)} {themeLabel(t)}
+                  All
                 </button>
-              ))}
+                {themes.map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setFilterTheme(t)}
+                    className={`rounded-full px-3 py-1 text-xs border ${
+                      filterTheme === t
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-background border-border"
+                    }`}
+                  >
+                    {themeEmoji(t)} {themeLabel(t)}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
 
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-semibold text-muted-foreground">
-              Chapter {filterTheme !== "all" && `(within ${themeLabel(filterTheme)})`}
-            </span>
-            <select
-              className="border border-border rounded-lg p-2 bg-background"
-              value={filterChapter}
-              onChange={(e) => setFilterChapter(e.target.value)}
-            >
-              <option value="all">All chapters</option>
-              {chapters.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="flex flex-col gap-1">
+                Points
+                <select
+                  className="border border-border rounded-lg p-2 bg-background"
+                  value={filterPoints}
+                  onChange={(e) => setFilterPoints(e.target.value as PointsFilter)}
+                >
+                  <option value="all">All</option>
+                  <option value="2">2 Punkte</option>
+                  <option value="3">3 Punkte</option>
+                  <option value="4">4 Punkte</option>
+                  <option value="5">5 Punkte</option>
+                </select>
+              </label>
 
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-semibold text-muted-foreground">
-              Keyword search (question text)
-            </span>
-            <input
-              type="text"
-              placeholder='e.g. "Anhänger", "Einbahn", "Vorfahrt"'
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              className="border border-border rounded-lg p-2 bg-background"
-            />
-          </label>
-
-          <div className="grid grid-cols-2 gap-3">
-            <label className="flex flex-col gap-1">
-              Media
-              <select
-                className="border border-border rounded-lg p-2 bg-background"
-                value={filterMedia}
-                onChange={(e) => setFilterMedia(e.target.value as MediaFilter)}
-              >
-                <option value="all">Any media</option>
-                <option value="video">🎬 Video only</option>
-                <option value="image">🖼️ Picture only</option>
-                <option value="none">Text only</option>
-              </select>
-            </label>
-
-            <label className="flex items-center gap-2 self-end pb-2">
-              <input
-                type="checkbox"
-                checked={numericOnly}
-                onChange={(e) => setNumericOnly(e.target.checked)}
-              />
-              🔢 Numeric answers only
-            </label>
-
-            <label className="flex flex-col gap-1">
-              Points
-              <select
-                className="border border-border rounded-lg p-2 bg-background"
-                value={filterPoints}
-                onChange={(e) => setFilterPoints(e.target.value as PointsFilter)}
-              >
-                <option value="all">All</option>
-                <option value="2">2 Punkte</option>
-                <option value="3">3 Punkte</option>
-                <option value="4">4 Punkte</option>
-                <option value="5">5 Punkte</option>
-              </select>
-            </label>
-
-            <label className="flex flex-col gap-1">
-              Sort by
-              <select
-                className="border border-border rounded-lg p-2 bg-background"
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as SortBy)}
-              >
-                <option value="points-desc">Points (high → low)</option>
-                <option value="points-asc">Points (low → high)</option>
-                <option value="theme">Theme (A → Z)</option>
-                <option value="chapter">Chapter</option>
-                <option value="random">Random</option>
-              </select>
-            </label>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Language and license class are set from the switcher at the top of the page.
-          </p>
-
-          <div className="flex gap-2">
+              <label className="flex flex-col gap-1">
+                Sort by
+                <select
+                  className="border border-border rounded-lg p-2 bg-background"
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as SortBy)}
+                >
+                  <option value="points-desc">Points (high → low)</option>
+                  <option value="points-asc">Points (low → high)</option>
+                  <option value="theme">Theme (A → Z)</option>
+                  <option value="chapter">Chapter</option>
+                  <option value="random">Random</option>
+                </select>
+              </label>
+            </div>
             {sortBy === "random" && (
-              <Button variant="outline" size="sm" className="flex-1" onClick={() => setShuffleSeed((s) => s + 1)}>
+              <Button variant="outline" size="sm" className="w-full" onClick={() => setShuffleSeed((s) => s + 1)}>
                 Reshuffle
               </Button>
             )}
-            <Button variant="outline" size="sm" className="flex-1" onClick={saveCurrentFilter}>
-              ★ Save this filter
+
+            <button
+              onClick={() => setAdvancedOpen((o) => !o)}
+              className="w-full flex items-center justify-between text-sm font-medium text-primary py-2 border-t border-border"
+            >
+              <span>Advanced filters</span>
+              <span>{advancedOpen ? "▲" : "▼"}</span>
+            </button>
+
+            {advancedOpen && (
+              <div className="space-y-5 -mt-2">
+                <div>
+                  <div className="text-xs font-semibold text-muted-foreground mb-1.5">
+                    Exam part
+                  </div>
+                  <div className="grid grid-cols-3 gap-1 bg-secondary rounded-full p-1">
+                    {(["all", "grundstoff", "zusatzstoff"] as ExamPart[]).map((p) => (
+                      <button
+                        key={p}
+                        onClick={() => setExamPart(p)}
+                        title={
+                          p === "grundstoff"
+                            ? "Grundstoff - basic knowledge, asked in every license class"
+                            : p === "zusatzstoff"
+                            ? "Zusatzstoff - the class-specific half of the exam"
+                            : "Both parts"
+                        }
+                        className={`rounded-full py-1.5 text-xs font-medium transition-colors ${
+                          examPart === p
+                            ? "bg-primary text-primary-foreground glow-primary"
+                            : "hover:bg-background/60"
+                        }`}
+                      >
+                        {p === "all"
+                          ? "Both"
+                          : p === "grundstoff"
+                          ? "Basic"
+                          : licenseClass === "B"
+                          ? "Class B"
+                          : "Class-specific"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs font-semibold text-muted-foreground">
+                    Chapter {filterTheme !== "all" && `(within ${themeLabel(filterTheme)})`}
+                  </span>
+                  <select
+                    className="border border-border rounded-lg p-2 bg-background"
+                    value={filterChapter}
+                    onChange={(e) => setFilterChapter(e.target.value)}
+                  >
+                    <option value="all">All chapters</option>
+                    {chapters.map((c) => (
+                      <option key={c} value={c}>
+                        {chapterLabel(c)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="flex flex-col gap-1">
+                    Media
+                    <select
+                      className="border border-border rounded-lg p-2 bg-background"
+                      value={filterMedia}
+                      onChange={(e) => setFilterMedia(e.target.value as MediaFilter)}
+                    >
+                      <option value="all">Any media</option>
+                      <option value="video">🎬 Video only</option>
+                      <option value="image">🖼️ Picture only</option>
+                      <option value="none">Text only</option>
+                    </select>
+                  </label>
+
+                  <label className="flex items-center gap-2 self-end pb-2">
+                    <input
+                      type="checkbox"
+                      checked={numericOnly}
+                      onChange={(e) => setNumericOnly(e.target.checked)}
+                    />
+                    🔢 Numeric only
+                  </label>
+                </div>
+
+                <div>
+                  <div className="text-xs font-semibold text-muted-foreground mb-1.5">
+                    Topics {filterTags.length > 0 && `(${filterTags.length} selected)`}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {allTags.map((t) => (
+                      <button
+                        key={t}
+                        onClick={() =>
+                          setFilterTags((prev) =>
+                            prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]
+                          )
+                        }
+                        className={`rounded-full px-3 py-1 text-xs border ${
+                          filterTags.includes(t)
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-background border-border"
+                        }`}
+                      >
+                        {tagEmoji(t)} {tagLabel(t)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs font-semibold text-muted-foreground">
+                    Keyword search (question text)
+                  </span>
+                  <input
+                    type="text"
+                    placeholder='e.g. "Anhänger", "Einbahn", "Vorfahrt"'
+                    value={keyword}
+                    onChange={(e) => setKeyword(e.target.value)}
+                    className="border border-border rounded-lg p-2 bg-background"
+                  />
+                </label>
+
+                {savedFilters.length > 0 && (
+                  <div>
+                    <div className="text-xs font-semibold text-muted-foreground mb-1.5">
+                      My filters
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {savedFilters.map((f) => (
+                        <span
+                          key={f.id}
+                          className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs"
+                        >
+                          <button onClick={() => applySavedFilter(f)}>{f.name}</button>
+                          <button
+                            onClick={() => deleteSavedFilter(f.id)}
+                            className="text-muted-foreground hover:text-destructive"
+                            aria-label={`Delete ${f.name}`}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <Button variant="outline" size="sm" className="w-full" onClick={saveCurrentFilter}>
+                  ★ Save this filter combination
+                </Button>
+
+                <p className="text-xs text-muted-foreground">
+                  Language and license class are set from the switcher at the top of the page.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="safe-bottom border-t border-border p-4 shrink-0">
+            <Button className="w-full" onClick={() => setFiltersOpen(false)}>
+              Show {total} question{total === 1 ? "" : "s"}
             </Button>
           </div>
         </div>
@@ -760,6 +846,8 @@ function PracticeInner() {
               ? "You've answered every question in this set already."
               : mode === "due"
               ? "Nothing is due for review right now - come back later."
+              : mode === "selected"
+              ? "Nothing was selected - pick some questions on the History page first."
               : "Try a different category, points, or media filter."}
           </p>
           {mode === "new" && (
