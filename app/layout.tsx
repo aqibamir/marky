@@ -27,7 +27,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="font-sans antialiased bg-background text-foreground min-h-screen flex flex-col">
-        <header className="safe-top sticky top-0 z-20 border-b border-border bg-background/80 backdrop-blur">
+        <header className="safe-top sticky top-0 z-20 border-b border-border bg-background/80 backdrop-blur print:hidden">
           <div className="max-w-4xl mx-auto px-2 sm:px-4">
             <div className="flex items-center justify-between h-14 px-2">
               <Link href="/" className="font-bold tracking-tight shrink-0">
@@ -40,6 +40,7 @@ export default function RootLayout({
                 ["/practice", "Practice"],
                 ["/history", "History"],
                 ["/insights", "Insights"],
+                ["/cheatsheet", "Cheat Sheet"],
                 ["/driving-questions", "Browse"],
               ].map(([href, label]) => (
                 <Link
