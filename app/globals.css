@@ -4,47 +4,136 @@
 
 @layer base {
   :root {
-    --background: 30 0% 100%;
-    --foreground: 240 10% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 142.1 76.2% 36.3%;
-    --primary-foreground: 355.7 100% 97.3%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 142.1 76.2% 36.3%;
+    /* Dark, neon-green brand look: near-black surfaces, white text, a
+       glowing spring-green primary. This is the app's one committed look
+       (not gated behind system light/dark), per the requested direction. */
+    --background: 160 20% 5%;
+    --foreground: 120 30% 96%;
+    --card: 160 15% 9%;
+    --card-foreground: 120 30% 96%;
+    --popover: 160 18% 7%;
+    --popover-foreground: 120 30% 96%;
+    --primary: 150 100% 50%; /* neon spring green */
+    --primary-foreground: 160 40% 6%;
+    --secondary: 160 12% 14%;
+    --secondary-foreground: 120 20% 92%;
+    --muted: 160 12% 14%;
+    --muted-foreground: 150 8% 62%;
+    --accent: 174 100% 45%; /* neon cyan, used sparingly */
+    --accent-foreground: 160 40% 6%;
+    --success: 150 100% 50%;
+    --success-foreground: 160 40% 6%;
+    --warning: 45 100% 55%;
+    --warning-foreground: 160 40% 6%;
+    --destructive: 346 100% 62%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 160 12% 20%;
+    --input: 160 12% 20%;
+    --ring: 150 100% 50%;
     --radius: 1rem;
   }
 
   .dark {
-    --background: 20 14.3% 4.1%;
-    --foreground: 0 0% 95%;
-    --card: 24 9.8% 10%;
-    --card-foreground: 0 0% 95%;
-    --popover: 0 0% 9%;
-    --popover-foreground: 0 0% 95%;
-    --primary: 142.1 70.6% 45.3%;
-    --primary-foreground: 144.9 80.4% 10%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 15%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 12 6.5% 15.1%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 85.7% 97.3%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 142.4 71.8% 29.2%;
+    /* Same palette - dark is the only mode, kept for components that key
+       off .dark explicitly. */
+    --background: 160 20% 5%;
+    --foreground: 120 30% 96%;
+    --card: 160 15% 9%;
+    --card-foreground: 120 30% 96%;
+    --popover: 160 18% 7%;
+    --popover-foreground: 120 30% 96%;
+    --primary: 150 100% 50%;
+    --primary-foreground: 160 40% 6%;
+    --secondary: 160 12% 14%;
+    --secondary-foreground: 120 20% 92%;
+    --muted: 160 12% 14%;
+    --muted-foreground: 150 8% 62%;
+    --accent: 174 100% 45%;
+    --accent-foreground: 160 40% 6%;
+    --success: 150 100% 50%;
+    --success-foreground: 160 40% 6%;
+    --warning: 45 100% 55%;
+    --warning-foreground: 160 40% 6%;
+    --destructive: 346 100% 62%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 160 12% 20%;
+    --input: 160 12% 20%;
+    --ring: 150 100% 50%;
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  /* The app is a fixed dark neon theme everywhere except when printing:
+     white paper, black ink is what a physical printout (or "save as PDF"
+     for offline study, e.g. the Cheat Sheet page) actually needs, and most
+     printers/PDF exports skip background colors anyway. Overriding the
+     same CSS variables every component already reads means every
+     bg-card/text-foreground/border-border/etc. utility flips correctly
+     without hunting down each one individually. */
+  @media print {
+    /* Deliberately :root only, not ", .dark" - Tailwind's content-based
+       purge drops an entire rule if any selector in its list is a class
+       token that never appears literally in scanned source (".dark" is
+       never applied anywhere; this app is always dark via :root alone),
+       and it takes the whole selector list with it, :root included. */
+    :root {
+      --background: 0 0% 100%;
+      --foreground: 0 0% 0%;
+      --card: 0 0% 100%;
+      --card-foreground: 0 0% 0%;
+      --popover: 0 0% 100%;
+      --popover-foreground: 0 0% 0%;
+      --primary: 150 100% 22%;
+      --primary-foreground: 0 0% 100%;
+      --secondary: 0 0% 94%;
+      --secondary-foreground: 0 0% 0%;
+      --muted: 0 0% 94%;
+      --muted-foreground: 0 0% 30%;
+      --accent: 174 100% 22%;
+      --accent-foreground: 0 0% 100%;
+      --success: 150 100% 20%;
+      --success-foreground: 0 0% 100%;
+      --warning: 35 100% 28%;
+      --warning-foreground: 0 0% 100%;
+      --destructive: 346 100% 32%;
+      --destructive-foreground: 0 0% 100%;
+      --border: 0 0% 65%;
+      --input: 0 0% 65%;
+      --ring: 150 100% 22%;
+    }
+    html {
+      color-scheme: light;
+    }
+  }
+}
+
+@layer utilities {
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .glow-primary {
+    box-shadow: 0 0 16px hsl(var(--primary) / 0.5), 0 0 2px hsl(var(--primary) / 0.8);
+  }
+  .glow-text {
+    text-shadow: 0 0 20px hsl(var(--primary) / 0.6);
+  }
+  .glow-border {
+    box-shadow: 0 0 0 1px hsl(var(--primary) / 0.4), 0 0 14px hsl(var(--primary) / 0.35);
+  }
+
+  /* Neon glow effects are a screen-only affectation - on paper they'd just
+     smear ink for no benefit. */
+  @media print {
+    .glow-primary,
+    .glow-text,
+    .glow-border {
+      box-shadow: none !important;
+      text-shadow: none !important;
+    }
   }
 }
