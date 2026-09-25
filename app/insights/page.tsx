@@ -1,9 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { ChevronRightIcon } from "@radix-ui/react-icons";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Segmented } from "@/components/ui/segmented";
 import { useEffect, useMemo, useState } from "react";
 import {
-  themeEmoji,
   themeLabel,
   type DrivingQuestion,
   type Language,
@@ -32,16 +35,15 @@ function Ring({ pct, label, sub }: { pct: number; label: string; sub: string }) 
           cx="50"
           cy="50"
           r={r}
-          stroke="hsl(var(--primary))"
+          stroke="hsl(var(--signal))"
           strokeWidth="10"
           fill="none"
           strokeDasharray={c}
           strokeDashoffset={offset}
           strokeLinecap="round"
-          style={{ filter: "drop-shadow(0 0 6px hsl(var(--primary) / 0.7))" }}
         />
       </svg>
-      <div className="-mt-16 text-xl font-bold">{label}</div>
+      <div className="-mt-16 font-display font-semibold text-2xl tabular">{label}</div>
       <div className="mt-16 text-xs text-muted-foreground">{sub}</div>
     </div>
   );
@@ -125,7 +127,9 @@ export default function InsightsPage() {
 
   if (!questions) {
     return (
-      <main className="max-w-2xl mx-auto p-4">
+      <main className="max-w-2xl mx-auto w-full p-4 space-y-3">
+        <div className="h-8 w-40 rounded-[10px] bg-secondary animate-pulse" />
+        <div className="h-24 rounded-2xl bg-secondary animate-pulse" />
         <div className="h-48 rounded-2xl bg-secondary animate-pulse" />
       </main>
     );
@@ -133,66 +137,52 @@ export default function InsightsPage() {
 
   return (
     <main className="max-w-2xl mx-auto w-full px-4 py-4 flex-1">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-bold glow-text">Insights</h1>
-      </div>
+      <h1 className="font-display font-bold text-[28px] leading-8 mb-4">Insights</h1>
 
-      <div className="grid grid-cols-2 gap-1 bg-secondary rounded-full p-1 mb-6 text-sm">
-        <button
-          onClick={() => setTab("overview")}
-          className={`rounded-full py-1.5 font-medium transition-colors ${
-            tab === "overview" ? "bg-primary text-primary-foreground glow-primary" : ""
-          }`}
-        >
-          Overview
-        </button>
-        <button
-          onClick={() => setTab("weak")}
-          className={`rounded-full py-1.5 font-medium transition-colors ${
-            tab === "weak" ? "bg-primary text-primary-foreground glow-primary" : ""
-          }`}
-        >
-          Weak Points
-        </button>
-      </div>
+      <Segmented
+        label="Insights view"
+        className="mb-6"
+        options={[
+          { value: "overview" as const, label: "Overview" },
+          { value: "weak" as const, label: "Weak points" },
+        ]}
+        value={tab}
+        onChange={setTab}
+      />
 
       {attempted.length === 0 ? (
-        <div className="text-center py-16">
-          <p className="text-lg font-medium mb-1">No practice history yet</p>
-          <p className="text-sm text-muted-foreground mb-4">
-            Answer a few questions and your patterns will show up here.
-          </p>
-          <Link href="/practice" className="text-primary underline text-sm">
-            Start practicing →
-          </Link>
-        </div>
+        <EmptyState
+          title="No practice history yet"
+          body="Answer a few questions and your patterns will show up here."
+          actionHref="/practice"
+          actionLabel="Start practising"
+        />
       ) : tab === "overview" ? (
-        <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-2xl border border-border bg-card p-4">
-              <div className="text-2xl">🔥</div>
-              <div className="text-2xl font-bold mt-1">{streak}</div>
-              <div className="text-xs text-muted-foreground">day streak</div>
-            </div>
-            <div className="rounded-2xl border border-border bg-card p-4">
-              <div className="text-2xl">💎</div>
-              <div className="text-2xl font-bold mt-1">{points}</div>
-              <div className="text-xs text-muted-foreground">points mastered</div>
-            </div>
+        <div className="space-y-4">
+          <dl className="grid grid-cols-3 gap-2">
+            <StatTile value={streak} label="day streak" />
+            <StatTile value={`${accuracy}%`} label="accuracy" />
+            <StatTile value={points} label="points mastered" />
+          </dl>
+
+          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm flex items-center justify-around">
+            <Ring pct={accuracy} label={`${accuracy}%`} sub="currently correct" />
+            <dl className="text-center space-y-3">
+              <div>
+                <dd className="font-display font-semibold text-2xl tabular">{attempted.length}</dd>
+                <dt className="text-[13px] text-muted-foreground">answered</dt>
+              </div>
+              <div>
+                <dd className="font-display font-semibold text-2xl tabular">{totalCorrectNow}</dd>
+                <dt className="text-[13px] text-muted-foreground">right on last try</dt>
+              </div>
+            </dl>
           </div>
 
-          <div className="rounded-2xl border border-border bg-card p-4 flex items-center justify-around">
-            <Ring pct={accuracy} label={`${accuracy}%`} sub="accuracy" />
-            <div className="text-sm text-muted-foreground text-center">
-              <div className="text-lg font-semibold text-foreground">{attempted.length}</div>
-              answered
-              <div className="text-lg font-semibold text-foreground mt-2">{totalCorrectNow}</div>
-              currently correct
+          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+              Last 7 days
             </div>
-          </div>
-
-          <div className="rounded-2xl border border-border bg-card p-4">
-            <div className="text-xs font-semibold text-muted-foreground mb-3">Last 7 days</div>
             <div className="flex justify-between">
               {week.map((d) => {
                 const date = new Date(d.key);
@@ -201,15 +191,14 @@ export default function InsightsPage() {
                 return (
                   <div key={d.key} className="flex flex-col items-center gap-1">
                     <div
-                      className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-medium ${
-                        active
-                          ? "bg-primary text-primary-foreground glow-primary"
-                          : "bg-secondary text-muted-foreground"
+                      title={`${d.count} answered`}
+                      className={`h-9 w-9 rounded-full flex items-center justify-center text-[13px] font-semibold tabular ${
+                        active ? "bg-signal text-signal-foreground" : "bg-secondary text-muted-foreground"
                       }`}
                     >
                       {d.count > 0 ? d.count : ""}
                     </div>
-                    <span className="text-[10px] text-muted-foreground">{dayLetter}</span>
+                    <span className="text-[11px] font-semibold text-muted-foreground">{dayLetter}</span>
                   </div>
                 );
               })}
@@ -219,78 +208,100 @@ export default function InsightsPage() {
       ) : (
         <div className="space-y-6">
           <section>
-            <h2 className="text-sm font-semibold mb-2">Categories you struggle with</h2>
+            <h2 className="font-semibold text-[17px] mb-2">Categories you struggle with</h2>
             {weakThemes.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No repeated mistakes yet - nice.</p>
+              <p className="text-sm text-muted-foreground">No repeated mistakes yet.</p>
             ) : (
-              <div className="space-y-2">
+              <ul className="rounded-2xl border border-border bg-card overflow-hidden divide-y divide-border">
                 {weakThemes.map((t) => (
-                  <Link
-                    key={t.theme}
-                    href={`/practice?theme=${encodeURIComponent(t.theme)}&mode=weak`}
-                    className="flex items-center justify-between rounded-xl border border-border bg-card p-3 hover:border-primary/50"
-                  >
-                    <span>
-                      {themeEmoji(t.theme)} {themeLabel(t.theme)}
-                    </span>
-                    <span className="text-xs text-destructive font-medium">
-                      {t.wrong}/{t.total} wrong ({Math.round(t.rate * 100)}%)
-                    </span>
-                  </Link>
+                  <li key={t.theme}>
+                    <Link
+                      href={`/practice?theme=${encodeURIComponent(t.theme)}&mode=weak`}
+                      className="flex items-center gap-3 px-4 py-3 hover:bg-secondary transition-colors"
+                    >
+                      <span className="flex-1 min-w-0">
+                        <span className="block font-medium truncate">{themeLabel(t.theme)}</span>
+                        <span className="block text-[13px] text-muted-foreground">
+                          {t.wrong} of {t.total} wrong
+                        </span>
+                      </span>
+                      <RateBadge rate={t.rate} />
+                      <ChevronRightIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+                    </Link>
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
           </section>
 
           <section>
-            <h2 className="text-sm font-semibold mb-2">Toughest chapters</h2>
+            <h2 className="font-semibold text-[17px] mb-2">Toughest chapters</h2>
             {weakChapters.length === 0 ? (
               <p className="text-sm text-muted-foreground">Nothing stands out yet.</p>
             ) : (
-              <div className="space-y-2">
+              <ul className="rounded-2xl border border-border bg-card overflow-hidden divide-y divide-border">
                 {weakChapters.map((c) => (
-                  <Link
-                    key={c.chapter}
-                    href={`/practice?chapter=${encodeURIComponent(c.chapter)}&mode=weak`}
-                    className="flex items-center justify-between rounded-xl border border-border bg-card p-3 hover:border-primary/50"
-                  >
-                    <span className="truncate pr-2">{c.chapter}</span>
-                    <span className="text-xs text-destructive font-medium shrink-0">
-                      {c.wrong}/{c.total} wrong
-                    </span>
-                  </Link>
+                  <li key={c.chapter}>
+                    <Link
+                      href={`/practice?chapter=${encodeURIComponent(c.chapter)}&mode=weak`}
+                      className="flex items-center gap-3 px-4 py-3 hover:bg-secondary transition-colors"
+                    >
+                      <span className="flex-1 min-w-0">
+                        <span className="block font-medium truncate">{c.chapter}</span>
+                        <span className="block text-[13px] text-muted-foreground">
+                          {c.wrong} of {c.total} wrong
+                        </span>
+                      </span>
+                      <RateBadge rate={c.rate} />
+                      <ChevronRightIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+                    </Link>
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
           </section>
 
           <section>
-            <h2 className="text-sm font-semibold mb-2">Questions you keep missing</h2>
+            <h2 className="font-semibold text-[17px] mb-2">Questions you keep missing</h2>
             {repeatOffenders.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Nothing you&rsquo;ve missed more than once - keep going.
-              </p>
+              <p className="text-sm text-muted-foreground">Nothing you&rsquo;ve missed more than once.</p>
             ) : (
-              <div className="space-y-2">
+              <ul className="rounded-2xl border border-border bg-card overflow-hidden divide-y divide-border">
                 {repeatOffenders.map(({ q, wrongCount }) => (
-                  <div key={q.question_id} className="rounded-xl border border-border bg-card p-3">
-                    <div className="text-sm">{q.question_text}</div>
-                    <div className="text-xs text-destructive mt-1">
-                      Missed {wrongCount}× · {themeEmoji(q.theme_name)} {themeLabel(q.theme_name)}
-                    </div>
-                  </div>
+                  <li key={q.question_id} className="px-4 py-3">
+                    <p className="text-[15px] leading-[22px]">{q.question_text}</p>
+                    <p className="mt-1 text-[13px] text-muted-foreground">
+                      <span className="font-semibold text-destructive">Missed {wrongCount} times</span> ·{" "}
+                      {themeLabel(q.theme_name)}
+                    </p>
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
           </section>
 
-          <div className="text-center">
-            <Link href="/practice?mode=weak" className="text-primary underline text-sm">
-              Practice all weak spots →
-            </Link>
-          </div>
+          <Button asChild className="w-full">
+            <Link href="/practice?mode=weak">Practise all weak spots</Link>
+          </Button>
         </div>
       )}
     </main>
+  );
+}
+
+function StatTile({ value, label }: { value: string | number; label: string }) {
+  return (
+    <div className="rounded-[10px] border border-border bg-card px-3 py-3">
+      <dd className="font-display font-semibold text-[28px] leading-8 tabular">{value}</dd>
+      <dt className="text-[13px] text-muted-foreground leading-tight">{label}</dt>
+    </div>
+  );
+}
+
+function RateBadge({ rate }: { rate: number }) {
+  return (
+    <span className="inline-flex items-center h-[22px] px-2 rounded-full bg-destructive/10 text-destructive text-xs font-semibold tabular shrink-0">
+      {Math.round(rate * 100)}% wrong
+    </span>
   );
 }

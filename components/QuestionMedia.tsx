@@ -15,7 +15,7 @@ export default function QuestionMedia({ imageUrls, videoUrls }: QuestionMediaPro
   const standaloneImages = hasVideo ? imageUrls?.slice(1) : imageUrls;
 
   return (
-    <div className="mb-3 space-y-2">
+    <div className="mb-4 space-y-2">
       {videoUrls?.map((src) => (
         <video
           key={src}
@@ -23,7 +23,7 @@ export default function QuestionMedia({ imageUrls, videoUrls }: QuestionMediaPro
           playsInline
           preload="metadata"
           poster={poster}
-          className="w-full rounded-xl border border-border bg-black"
+          className="w-full rounded-[10px] bg-black"
         >
           <source src={src} />
         </video>
@@ -35,7 +35,7 @@ export default function QuestionMedia({ imageUrls, videoUrls }: QuestionMediaPro
           src={src}
           alt="Question illustration"
           loading="lazy"
-          className="w-full rounded-xl border border-border object-cover"
+          className="w-full rounded-[10px] border border-border object-cover"
         />
       ))}
     </div>

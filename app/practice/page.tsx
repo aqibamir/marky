@@ -3,7 +3,24 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  BookmarkIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  Cross2Icon,
+  ExclamationTriangleIcon,
+  MagnifyingGlassIcon,
+  MixerHorizontalIcon,
+  PlayIcon,
+  ReaderIcon,
+  ReloadIcon,
+  ShuffleIcon,
+} from "@radix-ui/react-icons";
 import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
+import { Segmented } from "@/components/ui/segmented";
 import QuestionMedia from "@/components/QuestionMedia";
 import {
   appliesToLicenseClass,
@@ -14,9 +31,7 @@ import {
   isNumericAnswerQuestion,
   matchesExamPart,
   questionMediaType,
-  tagEmoji,
   tagLabel,
-  themeEmoji,
   themeLabel,
   type DrivingQuestion,
   type ExamPart,
@@ -54,6 +69,11 @@ function normalizeAnswer(value: string): string {
   if (!/^[+-]?[\d.,\s]+$/.test(trimmed)) return trimmed;
   const n = parseFloat(trimmed.replace(/\s/g, "").replace(",", "."));
   return Number.isFinite(n) ? String(n) : trimmed;
+}
+
+// The catalog's option letters carry a trailing dot ("A."); show them bare.
+function plainLetter(letter: string): string {
+  return letter.replace(/\.$/, "");
 }
 
 function sameAnswer(a: string[], b: string[]) {
@@ -104,19 +124,6 @@ function sortList(list: DrivingQuestion[], sortBy: SortBy, shuffleSeed: number) 
   }
 }
 
-function pointsBadgeClass(points: number) {
-  switch (points) {
-    case 5:
-      return "bg-destructive/15 text-destructive";
-    case 4:
-      return "bg-warning/15 text-warning";
-    case 3:
-      return "bg-accent/15 text-accent";
-    default:
-      return "bg-secondary text-secondary-foreground";
-  }
-}
-
 const MODE_INFO: Record<Mode, { label: string; hint: string }> = {
   new: { label: "New", hint: "Questions you haven't seen yet" },
   due: { label: "Due", hint: "Spaced-repetition review queue" },
@@ -156,8 +163,12 @@ function QuestionVideoGate({
   return (
     <div className="space-y-3">
       {videoFailed ? (
-        <div className="w-full rounded-xl border border-warning/30 bg-warning/10 p-4 text-center text-sm text-warning">
-          ⚠️ This clip couldn&rsquo;t load - you can still answer without it.
+        <div className="flex items-start gap-2 rounded-[10px] bg-warning/10 px-4 py-3 text-sm">
+          <ExclamationTriangleIcon className="h-4 w-4 mt-0.5 shrink-0 text-warning" />
+          <span>
+            <span className="font-semibold text-warning">This clip couldn&rsquo;t load.</span> You can
+            still answer the question without it.
+          </span>
         </div>
       ) : (
         <video
@@ -168,25 +179,27 @@ function QuestionVideoGate({
           poster={poster}
           onEnded={() => setEnded(true)}
           onError={() => setVideoFailed(true)}
-          className="w-full rounded-xl border border-border bg-black"
+          className="w-full rounded-[10px] bg-black aspect-video"
         >
           <source src={src} />
         </video>
       )}
-      {ended && !videoFailed && (
-        <Button variant="outline" className="w-full" onClick={replay}>
-          ↺ Watch again
-        </Button>
-      )}
       {/* Always available, not just after the clip ends - a slow network, a
           dead link, or someone who just wants to skip should never be stuck
           on this screen with no way forward. */}
-      <Button className="w-full" onClick={onContinue}>
-        {ended || videoFailed ? "Go to question →" : "Skip to question →"}
-      </Button>
+      <div className="flex gap-2">
+        {ended && !videoFailed && (
+          <Button variant="outline" onClick={replay}>
+            <ReloadIcon /> Watch again
+          </Button>
+        )}
+        <Button className="flex-1" onClick={onContinue}>
+          {ended || videoFailed ? "Go to question" : "Skip to question"} <ArrowRightIcon className="h-4 w-4" />
+        </Button>
+      </div>
       {!ended && !videoFailed && (
-        <p className="text-xs text-center text-muted-foreground">
-          Watch the clip, then continue - or skip straight to the question.
+        <p className="text-[13px] text-center text-muted-foreground">
+          Watch the clip, then answer — or skip straight to the question.
         </p>
       )}
     </div>
@@ -222,7 +235,7 @@ function buildFilterSummary(opts: {
   } = opts;
   return [
     MODE_INFO[mode].label,
-    filterTheme === "all" ? "All categories" : `${themeEmoji(filterTheme)} ${themeLabel(filterTheme)}`,
+    filterTheme === "all" ? "All categories" : themeLabel(filterTheme),
     filterChapter !== "all" ? filterChapter : null,
     filterPoints === "all" ? null : `${filterPoints} Punkte`,
     filterMedia === "all" ? null : filterMedia,
@@ -233,7 +246,7 @@ function buildFilterSummary(opts: {
       : licenseClass === "B"
       ? "Class B specific"
       : "Class-specific",
-    numericOnly ? "🔢 numeric" : null,
+    numericOnly ? "numbers only" : null,
     filterTags.length > 0 ? filterTags.map(tagLabel).join(" + ") : null,
     keyword ? `"${keyword}"` : null,
   ]
@@ -585,10 +598,42 @@ function PracticeInner() {
     saveSavedFilters(updated);
   }
 
+  // Keyboard: 1-9 or A-Z pick an answer, Enter checks and then moves on.
+  // Ignored while typing in a field or with the filter panel open.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (!current || filtersOpen || e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) && (target as HTMLInputElement).type !== "radio" && (target as HTMLInputElement).type !== "checkbox") return;
+      if ((current.video_urls?.length ?? 0) > 0 && videoStage === "gate") return;
+      if (e.key === "Enter") {
+        if (target?.tagName === "BUTTON" || target?.tagName === "A") return;
+        e.preventDefault();
+        if (!checked) checkAnswer();
+        else if (index < total - 1) goTo(1);
+        return;
+      }
+      if (checked || isFreeEntryQuestion(current)) return;
+      const k = e.key.toUpperCase();
+      const byNumber = /^[1-9]$/.test(k) ? current.options[Number(k) - 1] : undefined;
+      const byLetter = current.options.find((o) => plainLetter(o.letter).toUpperCase() === k);
+      const opt = byNumber ?? byLetter;
+      if (opt) {
+        e.preventDefault();
+        toggleOption(opt.letter);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
   if (loadError) {
     return (
-      <main className="max-w-2xl mx-auto p-4">
-        <p className="text-destructive">Failed to load questions: {loadError}</p>
+      <main className="max-w-2xl mx-auto w-full p-4">
+        <div role="alert" className="rounded-[10px] bg-destructive/10 px-4 py-3">
+          <p className="font-semibold text-destructive">Couldn&rsquo;t load the questions</p>
+          <p className="text-sm mt-0.5">{loadError}. Check your connection and reload the page.</p>
+        </div>
       </main>
     );
   }
@@ -616,351 +661,332 @@ function PracticeInner() {
   });
 
   const progressPct = total > 0 ? ((index + 1) / total) * 100 : 0;
+  const multiAnswer = current ? current.correct_answers.length > 1 : false;
+  const currentHasVideo = (current?.video_urls?.length ?? 0) > 0;
+  const gated = Boolean(current && currentHasVideo && videoStage === "gate");
+  const correctLetters = current ? current.correct_answers.map((c) => c.letter) : [];
+  const missedLetters = correctLetters.filter((l) => !selected.includes(l)).map(plainLetter);
+  const wrongPicks = selected.filter((l) => !correctLetters.includes(l));
+  const correctShown = correctLetters.map(plainLetter);
+
+  let verdictTitle = "Correct";
+  if (checked && !isCorrectAnswer && current) {
+    if (isFreeEntryQuestion(current)) verdictTitle = `Not quite — the answer is ${correctShown.join(", ")}`;
+    else if (wrongPicks.length === 0 && missedLetters.length > 0)
+      verdictTitle = `Not quite — you missed ${missedLetters.join(" and ")}`;
+    else
+      verdictTitle = `Not quite — the answer is ${correctShown.join(" and ")}`;
+  }
 
   return (
     <main className="max-w-2xl mx-auto w-full px-4 pt-4 pb-28 flex-1">
-      <div className="flex items-center justify-between mb-3 gap-2">
-        <div>
-          <h1 className="text-xl font-bold glow-text">Practice</h1>
-          <p className="text-xs text-muted-foreground">
-            {attemptedIds.length} answered · {correctNowCount} correct
+      <div className="flex items-end justify-between gap-3 mb-3">
+        <div className="min-w-0">
+          <h1 className="font-display font-bold text-[28px] leading-8">Practice</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            <span className="tabular">{attemptedIds.length}</span> answered ·{" "}
+            <span className="tabular">{correctNowCount}</span> correct
             {dueCount > 0 && (
               <>
                 {" · "}
-                <button className="text-warning underline" onClick={() => setMode("due")}>
-                  {dueCount} due for review
+                <button className="font-semibold text-foreground underline underline-offset-2" onClick={() => setMode("due")}>
+                  {dueCount} due
                 </button>
               </>
             )}
           </p>
         </div>
-        <button
-          onClick={() => setFiltersOpen((o) => !o)}
-          className="text-sm font-medium border border-primary/40 text-primary rounded-full px-3 py-1.5 hover:bg-primary/10 shrink-0"
-        >
-          {filtersOpen ? "Done" : "Filters"}
-        </button>
+        {total > 0 && (
+          <span className="text-sm text-muted-foreground tabular shrink-0">
+            {index + 1} / {total}
+          </span>
+        )}
       </div>
 
       <button
         onClick={() => setFiltersOpen(true)}
-        className="w-full text-left text-xs text-muted-foreground bg-secondary/60 border border-border rounded-full px-3 py-2 mb-4 truncate"
+        className="w-full flex items-center gap-2 h-10 px-3 mb-3 rounded-full border border-input bg-card text-left text-[13px] font-semibold hover:bg-secondary transition-colors"
       >
-        {filterSummary}
+        <MixerHorizontalIcon className="h-4 w-4 shrink-0" />
+        <span className="truncate flex-1">{filterSummary}</span>
+        <span className="text-muted-foreground font-medium shrink-0">Filters</span>
       </button>
 
       {filtersOpen && (
-        <div className="fixed inset-0 z-30 bg-background flex flex-col">
-          <div className="safe-top flex items-center justify-between px-4 h-14 border-b border-border shrink-0">
-            <h2 className="font-bold">Filters</h2>
-            <button
-              onClick={() => setFiltersOpen(false)}
-              className="text-sm font-medium text-primary rounded-full px-3 py-1.5 hover:bg-primary/10"
-            >
-              Done
-            </button>
-          </div>
-
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5 text-sm">
-            <div>
-              <div className="text-xs font-semibold text-muted-foreground mb-1.5">Mode</div>
-              <div className="grid grid-cols-4 gap-1 bg-secondary rounded-full p-1">
-                {VISIBLE_MODES.map((m) => (
-                  <button
-                    key={m}
-                    title={MODE_INFO[m].hint}
-                    onClick={() => setMode(m)}
-                    className={`rounded-full py-1.5 text-xs font-medium transition-colors ${
-                      mode === m
-                        ? "bg-primary text-primary-foreground glow-primary"
-                        : "hover:bg-background/60"
-                    }`}
-                  >
-                    {MODE_INFO[m].label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <div className="text-xs font-semibold text-muted-foreground mb-1.5">Category</div>
-              <div className="flex flex-wrap gap-1.5">
-                <button
-                  onClick={() => setFilterTheme("all")}
-                  className={`rounded-full px-3 py-1 text-xs border ${
-                    filterTheme === "all"
-                      ? "bg-primary text-primary-foreground border-primary"
-                      : "bg-background border-border"
-                  }`}
-                >
-                  All
-                </button>
-                {themes.map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setFilterTheme(t)}
-                    className={`rounded-full px-3 py-1 text-xs border ${
-                      filterTheme === t
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-background border-border"
-                    }`}
-                  >
-                    {themeEmoji(t)} {themeLabel(t)}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <label className="flex flex-col gap-1">
-                Points
-                <select
-                  className="border border-border rounded-lg p-2 bg-background"
-                  value={filterPoints}
-                  onChange={(e) => setFilterPoints(e.target.value as PointsFilter)}
-                >
-                  <option value="all">All</option>
-                  <option value="2">2 Punkte</option>
-                  <option value="3">3 Punkte</option>
-                  <option value="4">4 Punkte</option>
-                  <option value="5">5 Punkte</option>
-                </select>
-              </label>
-
-              <label className="flex flex-col gap-1">
-                Sort by
-                <select
-                  className="border border-border rounded-lg p-2 bg-background"
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as SortBy)}
-                >
-                  <option value="points-desc">Points (high → low)</option>
-                  <option value="points-asc">Points (low → high)</option>
-                  <option value="theme">Theme (A → Z)</option>
-                  <option value="chapter">Chapter</option>
-                  <option value="random">Random</option>
-                </select>
-              </label>
-            </div>
-            {sortBy === "random" && (
-              <Button variant="outline" size="sm" className="w-full" onClick={() => setShuffleSeed((s) => s + 1)}>
-                Reshuffle
+        <div className="fixed inset-0 z-40 bg-black/30 md:flex md:items-center md:justify-center md:p-6" onClick={() => setFiltersOpen(false)}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Filters"
+            onClick={(e) => e.stopPropagation()}
+            className="absolute inset-0 md:static md:w-full md:max-w-lg md:max-h-[85vh] md:rounded-2xl md:border md:border-border md:shadow-xl bg-background flex flex-col overflow-hidden"
+          >
+            <div className="safe-top flex items-center justify-between px-4 h-14 border-b border-border shrink-0">
+              <h2 className="font-semibold text-[17px]">Filters</h2>
+              <Button variant="ghost" size="sm" onClick={() => setFiltersOpen(false)}>
+                Done
               </Button>
-            )}
+            </div>
 
-            <button
-              onClick={() => setAdvancedOpen((o) => !o)}
-              className="w-full flex items-center justify-between text-sm font-medium text-primary py-2 border-t border-border"
-            >
-              <span>Advanced filters</span>
-              <span>{advancedOpen ? "▲" : "▼"}</span>
-            </button>
+            <div className="flex-1 overflow-y-auto px-4 py-5 space-y-6">
+              <FilterGroup label="Mode" hint={MODE_INFO[mode].hint}>
+                <Segmented
+                  label="Mode"
+                  options={VISIBLE_MODES.map((m) => ({ value: m, label: MODE_INFO[m].label, title: MODE_INFO[m].hint }))}
+                  value={mode}
+                  onChange={setMode}
+                />
+              </FilterGroup>
 
-            {advancedOpen && (
-              <div className="space-y-5 -mt-2">
-                <div>
-                  <div className="text-xs font-semibold text-muted-foreground mb-1.5">
-                    Exam part
+              <FilterGroup label="Category">
+                <div className="flex flex-wrap gap-2">
+                  <Chip active={filterTheme === "all"} onClick={() => setFilterTheme("all")}>
+                    All
+                  </Chip>
+                  {themes.map((t) => (
+                    <Chip key={t} active={filterTheme === t} onClick={() => setFilterTheme(t)}>
+                      {themeLabel(t)}
+                    </Chip>
+                  ))}
+                </div>
+              </FilterGroup>
+
+              <FilterGroup label="Points">
+                <Segmented
+                  label="Points"
+                  options={[
+                    { value: "all" as PointsFilter, label: "Any" },
+                    { value: "2" as PointsFilter, label: "2" },
+                    { value: "3" as PointsFilter, label: "3" },
+                    { value: "4" as PointsFilter, label: "4" },
+                    { value: "5" as PointsFilter, label: "5" },
+                  ]}
+                  value={filterPoints}
+                  onChange={setFilterPoints}
+                />
+              </FilterGroup>
+
+              <FilterGroup label="Order">
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <select
+                      aria-label="Order"
+                      className="w-full h-11 appearance-none rounded-[10px] border border-input bg-card pl-3 pr-9 text-base"
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value as SortBy)}
+                    >
+                      <option value="points-desc">Points, high to low</option>
+                      <option value="points-asc">Points, low to high</option>
+                      <option value="theme">Category A–Z</option>
+                      <option value="chapter">Chapter</option>
+                      <option value="random">Shuffled</option>
+                    </select>
+                    <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   </div>
-                  <div className="grid grid-cols-3 gap-1 bg-secondary rounded-full p-1">
-                    {(["all", "grundstoff", "zusatzstoff"] as ExamPart[]).map((p) => (
-                      <button
-                        key={p}
-                        onClick={() => setExamPart(p)}
-                        title={
+                  {sortBy === "random" && (
+                    <Button variant="outline" onClick={() => setShuffleSeed((s) => s + 1)}>
+                      <ShuffleIcon /> Reshuffle
+                    </Button>
+                  )}
+                </div>
+              </FilterGroup>
+
+              <button
+                onClick={() => setAdvancedOpen((o) => !o)}
+                aria-expanded={advancedOpen}
+                className="w-full flex items-center justify-between gap-3 rounded-[10px] border border-input bg-card px-4 py-3 text-left hover:bg-secondary transition-colors"
+              >
+                <span>
+                  <span className="block font-semibold text-[15px]">More filters</span>
+                  <span className="block text-[13px] text-muted-foreground">
+                    Exam part, chapter, media, topics, keyword
+                  </span>
+                </span>
+                <ChevronDownIcon className={`h-4 w-4 shrink-0 transition-transform ${advancedOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {advancedOpen && (
+                <div className="space-y-6">
+                  <FilterGroup label="Exam part">
+                    <Segmented
+                      label="Exam part"
+                      options={(["all", "grundstoff", "zusatzstoff"] as ExamPart[]).map((p) => ({
+                        value: p,
+                        title:
                           p === "grundstoff"
                             ? "Grundstoff - basic knowledge, asked in every license class"
                             : p === "zusatzstoff"
                             ? "Zusatzstoff - the class-specific half of the exam"
-                            : "Both parts"
-                        }
-                        className={`rounded-full py-1.5 text-xs font-medium transition-colors ${
-                          examPart === p
-                            ? "bg-primary text-primary-foreground glow-primary"
-                            : "hover:bg-background/60"
-                        }`}
-                      >
-                        {p === "all"
-                          ? "Both"
-                          : p === "grundstoff"
-                          ? "Basic"
-                          : licenseClass === "B"
-                          ? "Class B"
-                          : "Class-specific"}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <label className="flex flex-col gap-1">
-                  <span className="text-xs font-semibold text-muted-foreground">
-                    Chapter {filterTheme !== "all" && `(within ${themeLabel(filterTheme)})`}
-                  </span>
-                  <select
-                    className="border border-border rounded-lg p-2 bg-background"
-                    value={filterChapter}
-                    onChange={(e) => setFilterChapter(e.target.value)}
-                  >
-                    <option value="all">All chapters</option>
-                    {chapters.map((c) => (
-                      <option key={c} value={c}>
-                        {chapterLabel(c)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="flex flex-col gap-1">
-                    Media
-                    <select
-                      className="border border-border rounded-lg p-2 bg-background"
-                      value={filterMedia}
-                      onChange={(e) => setFilterMedia(e.target.value as MediaFilter)}
-                    >
-                      <option value="all">Any media</option>
-                      <option value="video">🎬 Video only</option>
-                      <option value="image">🖼️ Picture only</option>
-                      <option value="none">Text only</option>
-                    </select>
-                  </label>
-
-                  <label className="flex items-center gap-2 self-end pb-2">
-                    <input
-                      type="checkbox"
-                      checked={numericOnly}
-                      onChange={(e) => setNumericOnly(e.target.checked)}
+                            : "Both parts",
+                        label:
+                          p === "all"
+                            ? "Both"
+                            : p === "grundstoff"
+                            ? "Basic"
+                            : licenseClass === "B"
+                            ? "Class B"
+                            : "Class-specific",
+                      }))}
+                      value={examPart}
+                      onChange={setExamPart}
                     />
-                    🔢 Numeric only
-                  </label>
-                </div>
+                  </FilterGroup>
 
-                <div>
-                  <div className="text-xs font-semibold text-muted-foreground mb-1.5">
-                    Topics {filterTags.length > 0 && `(${filterTags.length} selected)`}
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {allTags.map((t) => (
-                      <button
-                        key={t}
-                        onClick={() =>
-                          setFilterTags((prev) =>
-                            prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]
-                          )
-                        }
-                        className={`rounded-full px-3 py-1 text-xs border ${
-                          filterTags.includes(t)
-                            ? "bg-primary text-primary-foreground border-primary"
-                            : "bg-background border-border"
-                        }`}
+                  <FilterGroup label={`Chapter${filterTheme !== "all" ? ` in ${themeLabel(filterTheme)}` : ""}`}>
+                    <div className="relative">
+                      <select
+                        aria-label="Chapter"
+                        className="w-full h-11 appearance-none rounded-[10px] border border-input bg-card pl-3 pr-9 text-base"
+                        value={filterChapter}
+                        onChange={(e) => setFilterChapter(e.target.value)}
                       >
-                        {tagEmoji(t)} {tagLabel(t)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <label className="flex flex-col gap-1">
-                  <span className="text-xs font-semibold text-muted-foreground">
-                    Keyword search (question text)
-                  </span>
-                  <input
-                    type="text"
-                    placeholder='e.g. "Anhänger", "Einbahn", "Vorfahrt"'
-                    value={keyword}
-                    onChange={(e) => setKeyword(e.target.value)}
-                    className="border border-border rounded-lg p-2 bg-background"
-                  />
-                </label>
-
-                {savedFilters.length > 0 && (
-                  <div>
-                    <div className="text-xs font-semibold text-muted-foreground mb-1.5">
-                      My filters
+                        <option value="all">All chapters</option>
+                        {chapters.map((c) => (
+                          <option key={c} value={c}>
+                            {chapterLabel(c)}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {savedFilters.map((f) => (
-                        <span
-                          key={f.id}
-                          className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs"
+                  </FilterGroup>
+
+                  <FilterGroup label="Media">
+                    <div className="flex flex-wrap gap-2">
+                      {([
+                        ["all", "Any"],
+                        ["video", "Video"],
+                        ["image", "Picture"],
+                        ["none", "Text only"],
+                      ] as [MediaFilter, string][]).map(([value, label]) => (
+                        <Chip key={value} active={filterMedia === value} onClick={() => setFilterMedia(value)}>
+                          {label}
+                        </Chip>
+                      ))}
+                      <Chip active={numericOnly} onClick={() => setNumericOnly(!numericOnly)}>
+                        Numbers only
+                      </Chip>
+                    </div>
+                  </FilterGroup>
+
+                  <FilterGroup label={`Topics${filterTags.length > 0 ? ` · ${filterTags.length} selected` : ""}`}>
+                    <div className="flex flex-wrap gap-2">
+                      {allTags.map((t) => (
+                        <Chip
+                          key={t}
+                          active={filterTags.includes(t)}
+                          onClick={() =>
+                            setFilterTags((prev) =>
+                              prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]
+                            )
+                          }
                         >
-                          <button onClick={() => applySavedFilter(f)}>{f.name}</button>
-                          <button
-                            onClick={() => deleteSavedFilter(f.id)}
-                            className="text-muted-foreground hover:text-destructive"
-                            aria-label={`Delete ${f.name}`}
-                          >
-                            ×
-                          </button>
-                        </span>
+                          {tagLabel(t)}
+                        </Chip>
                       ))}
                     </div>
-                  </div>
-                )}
-                <Button variant="outline" size="sm" className="w-full" onClick={saveCurrentFilter}>
-                  ★ Save this filter combination
-                </Button>
+                  </FilterGroup>
 
-                <p className="text-xs text-muted-foreground">
-                  Language and license class are set from the switcher at the top of the page.
-                </p>
-              </div>
-            )}
-          </div>
+                  <FilterGroup label="Keyword in question text">
+                    <div className="relative">
+                      <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <input
+                        type="text"
+                        placeholder="e.g. Anhänger, Einbahn, Vorfahrt"
+                        value={keyword}
+                        onChange={(e) => setKeyword(e.target.value)}
+                        className="w-full h-11 rounded-[10px] border border-input bg-card pl-9 pr-3 text-base placeholder:text-muted-foreground"
+                      />
+                    </div>
+                  </FilterGroup>
 
-          <div className="safe-bottom border-t border-border p-4 shrink-0">
-            <Button className="w-full" onClick={() => setFiltersOpen(false)}>
-              Show {total} question{total === 1 ? "" : "s"}
-            </Button>
+                  <FilterGroup label="Saved filters">
+                    {savedFilters.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        {savedFilters.map((f) => (
+                          <span
+                            key={f.id}
+                            className="inline-flex items-center h-[34px] rounded-full border border-input bg-card text-[13px] font-semibold overflow-hidden"
+                          >
+                            <button className="pl-3 pr-2 h-full hover:bg-secondary" onClick={() => applySavedFilter(f)}>
+                              {f.name}
+                            </button>
+                            <button
+                              onClick={() => deleteSavedFilter(f.id)}
+                              className="pr-2.5 pl-1 h-full text-muted-foreground hover:text-destructive hover:bg-secondary"
+                              aria-label={`Delete ${f.name}`}
+                            >
+                              <Cross2Icon className="h-3.5 w-3.5" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <Button variant="outline" size="sm" className="w-full" onClick={saveCurrentFilter}>
+                      <BookmarkIcon /> Save this combination
+                    </Button>
+                  </FilterGroup>
+
+                  <p className="text-[13px] text-muted-foreground">
+                    Language and licence class are set at the top of the page and apply everywhere.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="safe-bottom border-t border-border p-4 shrink-0">
+              <Button className="w-full" onClick={() => setFiltersOpen(false)}>
+                Show {total} question{total === 1 ? "" : "s"}
+              </Button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* progress bar */}
       {total > 0 && (
-        <div className="h-1.5 rounded-full bg-secondary mb-4 overflow-hidden">
-          <div
-            className="h-full bg-primary glow-primary transition-all"
-            style={{ width: `${progressPct}%` }}
-          />
+        <div className="h-1.5 rounded-full bg-secondary mb-4 overflow-hidden" aria-hidden="true">
+          <div className="h-full rounded-full bg-signal transition-all" style={{ width: `${progressPct}%` }} />
         </div>
       )}
 
       {total === 0 && (
-        <div className="text-center py-16">
-          <p className="text-lg font-medium mb-1">
-            {mode === "new" ? "🎉 Nothing new here!" : "No questions match"}
+        <div className="flex flex-col items-center gap-1.5 text-center rounded-2xl border-[1.5px] border-dashed border-input px-4 py-10 mt-4">
+          <p className="text-[17px] font-semibold">
+            {mode === "new" ? "Nothing new in this set" : "No questions match"}
           </p>
-          <p className="text-sm text-muted-foreground mb-4">
+          <p className="text-sm text-muted-foreground mb-3 max-w-sm">
             {mode === "new"
               ? "You've answered every question in this set already."
               : mode === "due"
-              ? "Nothing is due for review right now - come back later."
+              ? "Nothing is due for review right now — come back later."
               : mode === "selected"
-              ? "Nothing was selected - pick some questions on the History page first."
-              : "Try a different category, points, or media filter."}
+              ? "Nothing was selected — pick some questions on the History page first."
+              : "Try a different category, points or media filter."}
           </p>
-          {mode === "new" && (
-            <Button onClick={() => setMode("all")}>Practice this set again</Button>
+          {mode === "new" ? (
+            <Button size="sm" onClick={() => setMode("all")}>Practise this set again</Button>
+          ) : (
+            <Button size="sm" variant="outline" onClick={() => setFiltersOpen(true)}>Change filters</Button>
           )}
         </div>
       )}
 
-      {current && (() => {
-        const hasVideo = (current.video_urls?.length ?? 0) > 0;
-        const isFreeEntry = isFreeEntryQuestion(current);
-        return (
-        <div className="rounded-2xl border border-border bg-card shadow-sm p-4">
-          <div className="flex justify-between items-center text-xs text-muted-foreground mb-3">
-            <span>
-              Question {index + 1} of {total}
+      {current && (
+        <section className="rounded-2xl border border-border bg-card shadow-sm p-4 sm:p-6">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground truncate">
+              {themeLabel(current.theme_name)}
             </span>
-            <span className={`px-2 py-0.5 rounded-full font-medium ${pointsBadgeClass(current.pointsValue)}`}>
+            <span
+              className={`inline-flex items-center h-[22px] px-2 rounded-full text-xs font-semibold shrink-0 ${
+                current.pointsValue === 5 ? "bg-signal text-signal-foreground" : "bg-secondary text-foreground"
+              }`}
+            >
               {current.points}
             </span>
           </div>
 
-          {hasVideo && videoStage === "gate" ? (
+          {gated ? (
             <QuestionVideoGate
               src={current.video_urls![0]}
               poster={current.image_urls?.[0]}
@@ -971,201 +997,285 @@ function PracticeInner() {
               {/* Once revealed, show the clip's still frame as a plain image
                   rather than the video itself. */}
               <QuestionMedia imageUrls={current.image_urls} videoUrls={undefined} />
-              {hasVideo && (
+              {currentHasVideo && (
                 <button
                   onClick={() => setVideoStage("gate")}
-                  className="text-xs text-primary underline mb-3 -mt-2 block"
+                  className="inline-flex items-center gap-1.5 text-sm font-semibold underline underline-offset-2 mb-4 -mt-2"
                 >
-                  ▶ Watch clip again
+                  <PlayIcon /> Watch clip again
                 </button>
               )}
 
-          <div className="font-medium mb-3">{current.question_text}</div>
+              <p className="text-[19px] leading-7 font-medium mb-4">{current.question_text}</p>
 
-          {isFreeEntry ? (
-            <div className="mb-4">
-              <label className="block text-xs text-muted-foreground mb-1.5">
-                Type the number
-              </label>
-              <input
-                type="text"
-                inputMode="decimal"
-                autoComplete="off"
-                value={selected[0] ?? ""}
-                onChange={(e) =>
-                  setSelected(e.target.value === "" ? [] : [e.target.value])
-                }
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !checked && selected.length > 0) checkAnswer();
-                }}
-                disabled={checked}
-                placeholder="e.g. 50"
-                className={`w-full border-2 rounded-xl p-3 bg-background text-lg font-semibold tracking-wide outline-none transition-colors ${
-                  checked
-                    ? isCorrectAnswer
-                      ? "border-success bg-success/10 glow-border"
-                      : "border-destructive bg-destructive/10"
-                    : "border-border focus:border-primary"
-                }`}
-              />
-              {checked && !isCorrectAnswer && (
-                <p className="text-sm mt-2 text-muted-foreground">
-                  Correct answer:{" "}
-                  <span className="font-semibold text-success">
-                    {current.correct_answers.map((c) => c.letter).join(", ")}
-                  </span>
-                </p>
-              )}
-            </div>
-          ) : (
-          <div className="space-y-2 mb-4">
-            {current.options.map((opt) => {
-              const isSelected = selected.includes(opt.letter);
-              const isCorrectOpt = current.correct_answers.some(
-                (c) => c.letter === opt.letter
-              );
-              let style = "border-border";
-              if (checked) {
-                if (isCorrectOpt) style = "border-success bg-success/10 glow-border";
-                else if (isSelected) style = "border-destructive bg-destructive/10";
-              } else if (isSelected) {
-                style = "border-primary bg-primary/5";
-              }
-              return (
-                <label
-                  key={opt.letter}
-                  className={`flex items-start gap-2 border-2 rounded-xl p-3 cursor-pointer transition-colors ${style}`}
-                >
+              {isFreeEntryQuestion(current) ? (
+                <div className="mb-1">
+                  <label htmlFor="free-entry" className="block text-[13px] font-semibold mb-1.5">
+                    Type the number
+                  </label>
                   <input
-                    type={current.correct_answers.length > 1 ? "checkbox" : "radio"}
-                    checked={isSelected}
-                    onChange={() => toggleOption(opt.letter)}
+                    id="free-entry"
+                    type="text"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    value={selected[0] ?? ""}
+                    onChange={(e) =>
+                      setSelected(e.target.value === "" ? [] : [e.target.value])
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !checked && selected.length > 0) checkAnswer();
+                    }}
                     disabled={checked}
-                    className="mt-1"
+                    placeholder="e.g. 50"
+                    className={`w-full h-14 rounded-[10px] border-[1.5px] px-4 font-display font-semibold text-[22px] tabular bg-card transition-colors placeholder:font-sans placeholder:font-normal placeholder:text-base placeholder:text-muted-foreground ${
+                      checked
+                        ? isCorrectAnswer
+                          ? "border-success bg-success/10"
+                          : "border-destructive bg-destructive/10"
+                        : "border-input"
+                    }`}
                   />
-                  <span>
-                    {opt.letter} {opt.text}
-                  </span>
-                </label>
-              );
-            })}
-          </div>
-          )}
-
-          {!checked ? (
-            <Button className="w-full" onClick={checkAnswer} disabled={selected.length === 0}>
-              Check answer
-            </Button>
-          ) : (
-            <div className="mb-1">
-              <p className={isCorrectAnswer ? "text-success font-semibold" : "text-destructive font-semibold"}>
-                {isCorrectAnswer ? "✓ Correct!" : "✕ Not quite."}
-              </p>
-
-              {priorHistory.wrongCount > 0 &&
-                (isCorrectAnswer ? (
-                  <p className="text-sm text-success mt-1">
-                    🎉 You&rsquo;d missed this one before — got it this time.
-                  </p>
-                ) : (
-                  <div className="mt-2 rounded-lg bg-warning/10 border border-warning/30 p-2">
-                    <p className="text-sm font-medium text-warning">
-                      ⚠️ You&rsquo;ve missed this {priorHistory.wrongCount + 1}× now
-                      {priorHistory.lastWrongSelected?.length
-                        ? ` — last time: ${priorHistory.lastWrongSelected
-                            .map(
-                              (l) =>
-                                current.options.find((o) => o.letter === l)?.letter ??
-                                l
-                            )
-                            .join(", ")}`
-                        : ""}
-                      .
+                </div>
+              ) : (
+                <>
+                  {multiAnswer && !checked && (
+                    <p className="text-[13px] font-medium text-muted-foreground -mt-2 mb-3">
+                      Select all that apply
                     </p>
-                    {current.comment && (
-                      <p className="text-xs font-semibold text-muted-foreground mt-1.5">
-                        📖 The concept to remember:
-                      </p>
-                    )}
+                  )}
+                  <div className="space-y-2" role={multiAnswer ? "group" : "radiogroup"} aria-label="Answers">
+                    {current.options.map((opt) => (
+                      <AnswerOption
+                        key={opt.letter}
+                        letter={opt.letter}
+                        text={opt.text}
+                        multi={multiAnswer}
+                        selected={selected.includes(opt.letter)}
+                        isCorrect={correctLetters.includes(opt.letter)}
+                        checked={checked}
+                        onToggle={() => toggleOption(opt.letter)}
+                      />
+                    ))}
                   </div>
-                ))}
-
-              {current.comment && (
-                <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">
-                  {current.comment}
-                </p>
+                </>
               )}
 
-              {!isCorrectAnswer &&
-                appliesToLicenseClass(current, "B") &&
-                getTheoryNotesForTags(getContentTags(current)).map((note, i) => (
+              {checked && (
+                <div className="mt-4">
                   <div
-                    key={i}
-                    className="mt-2 rounded-lg bg-primary/5 border border-primary/20 p-2.5"
+                    role="status"
+                    className={`flex items-center gap-3 rounded-[10px] px-4 py-3 ${
+                      isCorrectAnswer ? "bg-success/10" : "bg-destructive/10"
+                    }`}
                   >
-                    <p className="text-xs font-semibold text-primary mb-1">
-                      🎓 {note.title}
-                    </p>
-                    <p className="text-xs text-muted-foreground whitespace-pre-wrap">
-                      {note.body}
+                    <span
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
+                        isCorrectAnswer
+                          ? "bg-success text-success-foreground"
+                          : "bg-destructive text-destructive-foreground"
+                      }`}
+                    >
+                      {isCorrectAnswer ? <CheckIcon className="h-4 w-4" /> : <Cross2Icon className="h-4 w-4" />}
+                    </span>
+                    <p className={`font-bold text-[17px] leading-6 ${isCorrectAnswer ? "text-success" : "text-destructive"}`}>
+                      {verdictTitle}
                     </p>
                   </div>
-                ))}
-              {current.url && (
-                <a
-                  href={current.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs underline text-muted-foreground"
-                >
-                  source
-                </a>
+
+                  {priorHistory.wrongCount > 0 &&
+                    (isCorrectAnswer ? (
+                      <p className="mt-3 text-sm text-muted-foreground">
+                        You&rsquo;d missed this one before — this time you got it.
+                      </p>
+                    ) : (
+                      <div className="mt-3 rounded-[10px] bg-warning/10 px-4 py-3 text-sm">
+                        <p className="flex items-center gap-1.5 font-semibold text-warning">
+                          <ExclamationTriangleIcon className="h-4 w-4 shrink-0" />
+                          You&rsquo;ve missed this {priorHistory.wrongCount + 1} times
+                        </p>
+                        {priorHistory.lastWrongSelected?.length ? (
+                          <p className="mt-0.5">Last time you picked {priorHistory.lastWrongSelected.map(plainLetter).join(", ")}.</p>
+                        ) : null}
+                      </div>
+                    ))}
+
+                  {current.comment && (
+                    <p className="mt-3 text-[15px] leading-[23px] whitespace-pre-wrap">{current.comment}</p>
+                  )}
+
+                  {!isCorrectAnswer &&
+                    appliesToLicenseClass(current, "B") &&
+                    getTheoryNotesForTags(getContentTags(current)).map((note, i) => (
+                      <div key={i} className="mt-3 rounded-[10px] border border-border bg-background px-4 py-3">
+                        <p className="flex items-center gap-1.5 text-sm font-semibold mb-1">
+                          <ReaderIcon className="h-4 w-4 shrink-0" /> Rule to remember: {note.title}
+                        </p>
+                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">{note.body}</p>
+                      </div>
+                    ))}
+
+                  {current.url && (
+                    <a
+                      href={current.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-block mt-3 text-[13px] text-muted-foreground underline underline-offset-2"
+                    >
+                      Source
+                    </a>
+                  )}
+                </div>
               )}
-            </div>
-          )}
             </>
           )}
-        </div>
-        );
-      })()}
+        </section>
+      )}
 
       {total > 0 && isLastQuestion && checked && (
-        <div className="mt-4 text-center text-sm text-muted-foreground">
-          That&rsquo;s the last question in this set — nice work! This run is saved under{" "}
-          <Link href="/history" className="underline text-primary">
-            History → Runs
-          </Link>
-          , where you can redrill anything you got wrong. Adjust filters above to keep going, or check{" "}
-          <Link href="/insights" className="underline text-primary">
-            Insights
-          </Link>{" "}
-          for your patterns.
+        <div className="mt-4 rounded-[10px] bg-secondary px-4 py-3 text-sm">
+          <p className="font-semibold mb-0.5">That&rsquo;s the last question in this set.</p>
+          <p className="text-muted-foreground">
+            This run is saved in{" "}
+            <Link href="/history" className="text-foreground underline underline-offset-2">
+              History
+            </Link>
+            , where you can redo anything you got wrong. Change the filters to keep going, or check{" "}
+            <Link href="/insights" className="text-foreground underline underline-offset-2">
+              Insights
+            </Link>{" "}
+            for your patterns.
+          </p>
         </div>
       )}
 
-      {/* sticky bottom nav, mobile-friendly */}
-      {current && (
-        <div className="safe-bottom fixed bottom-0 left-0 right-0 border-t border-border bg-background/95 backdrop-blur">
-          <div className="max-w-2xl mx-auto flex items-center justify-between gap-2 px-4 py-3">
-            <Button variant="outline" onClick={() => goTo(-1)} disabled={index === 0}>
-              ← Previous
+      {/* Fixed action bar: the one primary action always sits under the
+          thumb - Check answer, then Next question. */}
+      {current && !gated && (
+        <div className="fixed inset-x-0 bottom-tabbar z-10 bg-background shadow-bar">
+          <div className="max-w-2xl mx-auto flex items-center gap-2 px-4 py-3">
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="Previous question"
+              onClick={() => goTo(-1)}
+              disabled={index === 0}
+            >
+              <ArrowLeftIcon className="h-4 w-4" />
             </Button>
-            <Button onClick={() => goTo(1)} disabled={isLastQuestion}>
-              Next →
-            </Button>
+            {!checked ? (
+              <Button className="flex-1" onClick={checkAnswer} disabled={selected.length === 0}>
+                Check answer
+              </Button>
+            ) : isLastQuestion ? (
+              <Button asChild className="flex-1">
+                <Link href="/history">See this run in History</Link>
+              </Button>
+            ) : (
+              <Button className="flex-1" onClick={() => goTo(1)}>
+                Next question <ArrowRightIcon className="h-4 w-4" />
+              </Button>
+            )}
+            {!checked && !isLastQuestion && (
+              <Button variant="ghost" onClick={() => goTo(1)} className="text-muted-foreground">
+                Skip
+              </Button>
+            )}
           </div>
         </div>
       )}
-
-      <div className="mt-3 text-center flex justify-center gap-3">
-        <Link href="/insights" className="text-xs underline text-muted-foreground">
-          Your weak points →
-        </Link>
-        <Link href="/cheatsheet" className="text-xs underline text-muted-foreground">
-          Browse full list
-        </Link>
-      </div>
     </main>
+  );
+}
+
+function FilterGroup({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{label}</div>
+      {children}
+      {hint && <p className="text-[13px] text-muted-foreground mt-1.5">{hint}</p>}
+    </div>
+  );
+}
+
+// One answer. The whole row is the hit target; a letter key on the left is
+// round for single-answer questions, square for "select all that apply".
+// After checking, each row says what happened in words as well as colour.
+function AnswerOption({
+  letter,
+  text,
+  multi,
+  selected,
+  isCorrect,
+  checked,
+  onToggle,
+}: {
+  letter: string;
+  text: string;
+  multi: boolean;
+  selected: boolean;
+  isCorrect: boolean;
+  checked: boolean;
+  onToggle: () => void;
+}) {
+  let state: "idle" | "selected" | "correct" | "incorrect" | "missed" = selected ? "selected" : "idle";
+  if (checked) {
+    if (isCorrect && selected) state = "correct";
+    else if (isCorrect) state = "missed";
+    else if (selected) state = "incorrect";
+    else state = "idle";
+  }
+  const row = {
+    idle: "border-input bg-card",
+    selected: "border-foreground bg-card ring-1 ring-inset ring-foreground",
+    correct: "border-success bg-success/10 ring-1 ring-inset ring-success",
+    incorrect: "border-destructive bg-destructive/10 ring-1 ring-inset ring-destructive",
+    missed: "border-success border-dashed border-[1.5px] bg-card",
+  }[state];
+  const key = {
+    idle: "border-input text-muted-foreground",
+    selected: "bg-foreground border-foreground text-background",
+    correct: "bg-success border-success text-success-foreground",
+    incorrect: "bg-destructive border-destructive text-destructive-foreground",
+    missed: "border-success text-success",
+  }[state];
+  return (
+    <label
+      className={`flex items-start gap-3 rounded-[10px] border py-3.5 pl-3.5 pr-3 transition-colors ${row} ${
+        checked ? "cursor-default" : "cursor-pointer hover:bg-secondary/60"
+      }`}
+    >
+      <input
+        type={multi ? "checkbox" : "radio"}
+        name="answer"
+        checked={selected}
+        onChange={onToggle}
+        disabled={checked}
+        className="peer sr-only"
+      />
+      <span
+        className={`mt-px flex h-6 w-6 shrink-0 items-center justify-center border-[1.5px] text-[13px] font-semibold peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ring ${
+          multi ? "rounded-md" : "rounded-full"
+        } ${key}`}
+      >
+        {plainLetter(letter)}
+      </span>
+      <span className="flex-1 text-base leading-6">{text}</span>
+      {state === "correct" && (
+        <span className="flex items-center gap-1 text-[13px] font-semibold leading-6 text-success shrink-0">
+          <CheckIcon /> Correct
+        </span>
+      )}
+      {state === "incorrect" && (
+        <span className="flex items-center gap-1 text-[13px] font-semibold leading-6 text-destructive shrink-0">
+          <Cross2Icon /> Your answer
+        </span>
+      )}
+      {state === "missed" && (
+        <span className="flex items-center gap-1 text-[13px] font-semibold leading-6 text-success shrink-0">
+          <CheckIcon /> Missed
+        </span>
+      )}
+    </label>
   );
 }
 
