@@ -142,6 +142,7 @@ function QuestionVideoGate({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [ended, setEnded] = useState(false);
+  const [videoFailed, setVideoFailed] = useState(false);
 
   function replay() {
     const el = videoRef.current;
@@ -154,29 +155,38 @@ function QuestionVideoGate({
 
   return (
     <div className="space-y-3">
-      <video
-        ref={videoRef}
-        controls
-        playsInline
-        preload="metadata"
-        poster={poster}
-        onEnded={() => setEnded(true)}
-        className="w-full rounded-xl border border-border bg-black"
-      >
-        <source src={src} />
-      </video>
-      {ended ? (
-        <div className="flex gap-2">
-          <Button variant="outline" className="flex-1" onClick={replay}>
-            ↺ Watch again
-          </Button>
-          <Button className="flex-1" onClick={onContinue}>
-            Go to question →
-          </Button>
+      {videoFailed ? (
+        <div className="w-full rounded-xl border border-warning/30 bg-warning/10 p-4 text-center text-sm text-warning">
+          ⚠️ This clip couldn&rsquo;t load - you can still answer without it.
         </div>
       ) : (
+        <video
+          ref={videoRef}
+          controls
+          playsInline
+          preload="metadata"
+          poster={poster}
+          onEnded={() => setEnded(true)}
+          onError={() => setVideoFailed(true)}
+          className="w-full rounded-xl border border-border bg-black"
+        >
+          <source src={src} />
+        </video>
+      )}
+      {ended && !videoFailed && (
+        <Button variant="outline" className="w-full" onClick={replay}>
+          ↺ Watch again
+        </Button>
+      )}
+      {/* Always available, not just after the clip ends - a slow network, a
+          dead link, or someone who just wants to skip should never be stuck
+          on this screen with no way forward. */}
+      <Button className="w-full" onClick={onContinue}>
+        {ended || videoFailed ? "Go to question →" : "Skip to question →"}
+      </Button>
+      {!ended && !videoFailed && (
         <p className="text-xs text-center text-muted-foreground">
-          Watch the clip, then continue to the question.
+          Watch the clip, then continue - or skip straight to the question.
         </p>
       )}
     </div>
@@ -1151,7 +1161,7 @@ function PracticeInner() {
         <Link href="/insights" className="text-xs underline text-muted-foreground">
           Your weak points →
         </Link>
-        <Link href="/driving-questions" className="text-xs underline text-muted-foreground">
+        <Link href="/cheatsheet" className="text-xs underline text-muted-foreground">
           Browse full list
         </Link>
       </div>

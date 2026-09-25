@@ -48,7 +48,7 @@ export default async function Home() {
               <Link href="/practice">Start practicing →</Link>
             </Button>
             <Button asChild size="lg" variant="outline">
-              <Link href="/driving-questions">Browse all questions</Link>
+              <Link href="/cheatsheet">Browse all questions</Link>
             </Button>
           </div>
 

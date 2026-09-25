@@ -41,7 +41,6 @@ export default function RootLayout({
                 ["/history", "History"],
                 ["/insights", "Insights"],
                 ["/cheatsheet", "Cheat Sheet"],
-                ["/driving-questions", "Browse"],
               ].map(([href, label]) => (
                 <Link
                   key={href}

@@ -154,6 +154,16 @@ function QuestionAnswerCard({ q, showChapter }: { q: DrivingQuestion; showChapte
           })}
         </ul>
       )}
+      {q.url && (
+        <a
+          href={q.url}
+          target="_blank"
+          rel="noreferrer"
+          className="text-xs underline text-muted-foreground mt-2 inline-block print:hidden"
+        >
+          source
+        </a>
+      )}
     </li>
   );
 }
