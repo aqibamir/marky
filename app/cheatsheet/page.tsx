@@ -26,13 +26,21 @@
 import Link from "next/link";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import {
+  ArrowLeftIcon,
+  CheckIcon,
+  ChevronRightIcon,
+  DownloadIcon,
+  ExclamationTriangleIcon,
+  MagnifyingGlassIcon,
+  ReaderIcon,
+} from "@radix-ui/react-icons";
 import { Button } from "@/components/ui/button";
+import { Segmented } from "@/components/ui/segmented";
 import QuestionMedia from "@/components/QuestionMedia";
 import {
   appliesToLicenseClass,
-  chapterEmoji,
   chapterLabel,
-  themeEmoji,
   themeLabel,
   type DrivingQuestion,
   type Language,
@@ -58,17 +66,10 @@ function compareDotted(a: string, b: string): number {
   return 0;
 }
 
+// 5-point questions (the ones that can sink an exam on their own) get the
+// brand yellow; everything else is a plain badge.
 function pointsBadgeClass(points: number) {
-  switch (points) {
-    case 5:
-      return "bg-destructive/15 text-destructive";
-    case 4:
-      return "bg-warning/15 text-warning";
-    case 3:
-      return "bg-accent/15 text-accent";
-    default:
-      return "bg-secondary text-secondary-foreground";
-  }
+  return points === 5 ? "bg-signal text-signal-foreground" : "bg-secondary text-foreground";
 }
 
 interface ChapterGroup {
@@ -111,17 +112,17 @@ function groupByThemeAndChapter(list: DrivingQuestion[]): ThemeGroup[] {
 function QuestionAnswerCard({ q, showChapter }: { q: DrivingQuestion; showChapter?: boolean }) {
   const isFreeEntry = q.options.length === 0;
   return (
-    <li className="rounded-xl border border-border bg-card p-3 print:break-inside-avoid">
+    <li className="px-4 py-3 print:break-inside-avoid">
       <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1.5 flex-wrap">
-        <span>{q.question_number}</span>
-        <span className={`px-1.5 py-0.5 rounded-full font-medium ${pointsBadgeClass(q.pointsValue)}`}>
+        <span className="tabular">{q.question_number}</span>
+        <span className={`inline-flex items-center h-5 px-2 rounded-full font-semibold ${pointsBadgeClass(q.pointsValue)}`}>
           {q.points}
         </span>
         {showChapter && (
           <>
             <span>·</span>
             <span>
-              {chapterEmoji(q.chapter_name)} {chapterLabel(q.chapter_name)}
+              {chapterLabel(q.chapter_name)}
             </span>
           </>
         )}
@@ -131,24 +132,29 @@ function QuestionAnswerCard({ q, showChapter }: { q: DrivingQuestion; showChapte
           <QuestionMedia imageUrls={q.image_urls} videoUrls={undefined} />
         </div>
       ) : null}
-      <p className="font-medium text-sm mb-2">{q.question_text}</p>
+      <p className="font-medium text-[15px] leading-[22px] mb-2">{q.question_text}</p>
       {isFreeEntry ? (
-        <p className="text-sm">
-          ✓ Correct answer:{" "}
-          <span className="font-bold text-success print:underline">
+        <p className="flex items-center gap-1.5 text-sm">
+          <CheckIcon className="text-success shrink-0" /> Answer:{" "}
+          <span className="font-semibold text-success print:underline">
             {q.correct_answers.map((a) => a.letter).join(", ")}
           </span>
         </p>
       ) : (
-        <ul className="text-sm space-y-0.5">
+        <ul className="text-sm space-y-1">
           {q.options.map((opt) => {
             const isCorrect = q.correct_answers.some((c2) => c2.letter === opt.letter);
             return (
               <li
                 key={opt.letter}
-                className={isCorrect ? "font-bold text-success print:underline" : "text-muted-foreground"}
+                className={`flex gap-2 ${isCorrect ? "font-semibold text-foreground print:underline" : "text-muted-foreground"}`}
               >
-                {isCorrect ? "✓" : "·"} {opt.letter} {opt.text}
+                {isCorrect ? (
+                  <CheckIcon className="mt-0.5 shrink-0 text-success" aria-label="Correct" />
+                ) : (
+                  <span className="w-[15px] shrink-0" aria-hidden="true" />
+                )}
+                <span>{opt.text}</span>
               </li>
             );
           })}
@@ -159,9 +165,9 @@ function QuestionAnswerCard({ q, showChapter }: { q: DrivingQuestion; showChapte
           href={q.url}
           target="_blank"
           rel="noreferrer"
-          className="text-xs underline text-muted-foreground mt-2 inline-block print:hidden"
+          className="text-xs underline underline-offset-2 text-muted-foreground mt-2 inline-block print:hidden"
         >
-          source
+          Source
         </a>
       )}
     </li>
@@ -170,19 +176,16 @@ function QuestionAnswerCard({ q, showChapter }: { q: DrivingQuestion; showChapte
 
 function PointsFilterRow({ value, onChange }: { value: PointsFilter; onChange: (p: PointsFilter) => void }) {
   return (
-    <div className="flex flex-wrap gap-1.5 mb-4 print:hidden">
-      {(["all", "2", "3", "4", "5"] as PointsFilter[]).map((p) => (
-        <button
-          key={p}
-          onClick={() => onChange(p)}
-          className={`rounded-full px-3 py-1 text-xs border ${
-            value === p ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border"
-          }`}
-        >
-          {p === "all" ? "All points" : `${p} Punkte`}
-        </button>
-      ))}
-    </div>
+    <Segmented
+      label="Points"
+      className="mb-5 print:hidden"
+      options={(["all", "2", "3", "4", "5"] as PointsFilter[]).map((p) => ({
+        value: p,
+        label: p === "all" ? "All points" : `${p} pts`,
+      }))}
+      value={value}
+      onChange={onChange}
+    />
   );
 }
 
@@ -362,7 +365,7 @@ function CheatSheetInner() {
     <main className="max-w-3xl mx-auto w-full px-4 py-6 print:max-w-none print:px-0">
       <div className="flex items-start justify-between gap-2 mb-2 print:hidden">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold glow-text">Cheat Sheet</h1>
+          <h1 className="font-display font-bold text-[28px] leading-8">Cheat sheet</h1>
           <p className="text-sm text-muted-foreground mt-1">
             {tab === "answers" ? (
               <>
@@ -381,37 +384,31 @@ function CheatSheetInner() {
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={handlePrint} className="shrink-0">
-          🖨️ Print
+          <DownloadIcon /> Print
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 gap-1 bg-secondary rounded-full p-1 mb-3 print:hidden">
-        <button
-          onClick={() => setTab("answers")}
-          className={`rounded-full py-1.5 text-sm font-medium transition-colors ${
-            tab === "answers" ? "bg-primary text-primary-foreground glow-primary" : "hover:bg-background/60"
-          }`}
-        >
-          Answer Key
-        </button>
-        <button
-          onClick={() => setTab("concepts")}
-          className={`rounded-full py-1.5 text-sm font-medium transition-colors ${
-            tab === "concepts" ? "bg-primary text-primary-foreground glow-primary" : "hover:bg-background/60"
-          }`}
-        >
-          Concepts
-        </button>
-      </div>
+      <Segmented
+        label="Cheat sheet view"
+        className="mb-3 print:hidden"
+        options={[
+          { value: "answers" as const, label: "Answer key" },
+          { value: "concepts" as const, label: "Concepts" },
+        ]}
+        value={tab}
+        onChange={setTab}
+      />
 
       {tab === "answers" ? (
-        <div className="rounded-xl border border-warning/30 bg-warning/10 p-3 text-xs text-muted-foreground mb-4 print:hidden">
-          <p className="font-semibold text-warning mb-1">⚠️ Memorize the answer, not the letter</p>
+        <div className="rounded-[10px] bg-warning/10 px-4 py-3 text-[13px] leading-5 mb-4 print:hidden">
+          <p className="flex items-center gap-1.5 font-semibold text-warning mb-1">
+            <ExclamationTriangleIcon className="shrink-0" /> Memorise the answer, not the letter
+          </p>
           <p>
             On the real exam, options are shown in whatever order that particular
             screen uses - the letters here (A/B/C) are just how this dataset
             happens to list them, not a fixed position. Memorize which{" "}
-            <em>answer text</em> is correct, marked ✓ below, not &ldquo;always
+            <em>answer text</em> is correct, ticked below, not &ldquo;always
             pick B&rdquo;.
             {licenseClass === "all" && (
               <>
@@ -425,8 +422,10 @@ function CheatSheetInner() {
           </p>
         </div>
       ) : (
-        <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 text-xs text-muted-foreground mb-4 print:hidden">
-          <p className="font-semibold text-primary mb-1">🎓 Understand these, don&rsquo;t just recite them</p>
+        <div className="rounded-[10px] border border-border bg-card px-4 py-3 text-[13px] leading-5 text-muted-foreground mb-4 print:hidden">
+          <p className="flex items-center gap-1.5 font-semibold text-foreground mb-1">
+            <ReaderIcon className="shrink-0" /> Understand these, don&rsquo;t just recite them
+          </p>
           <p>
             Each bullet is the rule of thumb behind an entire chapter, written to
             hold up even when a question is reworded, uses different numbers, or
@@ -439,13 +438,16 @@ function CheatSheetInner() {
       )}
 
       {tab === "answers" && !selectedChapter && (
-        <input
-          type="text"
-          placeholder="Search question text..."
-          value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
-          className="w-full border border-border rounded-lg p-2 bg-background text-sm mb-3 print:hidden"
-        />
+        <div className="relative mb-3 print:hidden">
+          <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Search question text"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            className="w-full h-11 rounded-[10px] border border-input bg-card pl-9 pr-3 text-base placeholder:text-muted-foreground"
+          />
+        </div>
       )}
       {tab === "answers" && !searchActive && <PointsFilterRow value={pointsFilter} onChange={setPointsFilter} />}
 
@@ -458,7 +460,7 @@ function CheatSheetInner() {
           {searchResults.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-12">No questions match &ldquo;{keyword}&rdquo;.</p>
           ) : (
-            <ol className="space-y-3">
+            <ol className="rounded-2xl border border-border bg-card overflow-hidden divide-y divide-border print:border-0 print:divide-y-0 print:space-y-3">
               {searchResults.map((q) => (
                 <QuestionAnswerCard key={q.question_id} q={q} showChapter />
               ))}
@@ -471,26 +473,25 @@ function CheatSheetInner() {
         <>
           <button
             onClick={() => setSelectedChapter(null)}
-            className="text-sm font-medium text-primary hover:underline mb-3 print:hidden"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold mb-3 hover:underline underline-offset-2 print:hidden"
           >
-            ← All chapters
+            <ArrowLeftIcon /> All chapters
           </button>
-          <h2 className="flex items-center gap-2 text-lg font-bold border-b-2 border-primary/40 pb-2 mb-4">
-            <span>{chapterEmoji(selectedChapterData.chapter.chapterName)}</span>
-            {chapterLabel(selectedChapterData.chapter.chapterName)}
-            <span className="text-sm font-normal text-muted-foreground">
-              ({selectedChapterData.chapter.questions.length})
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            {themeLabel(selectedChapterData.theme.themeName)}
+          </p>
+          <h2 className="font-display font-bold text-[22px] leading-7 mb-4">
+            {chapterLabel(selectedChapterData.chapter.chapterName)}{" "}
+            <span className="font-sans font-normal text-base text-muted-foreground tabular">
+              · {selectedChapterData.chapter.questions.length}
             </span>
           </h2>
-          <p className="text-xs text-muted-foreground -mt-3 mb-4">
-            {themeEmoji(selectedChapterData.theme.themeName)} {themeLabel(selectedChapterData.theme.themeName)}
-          </p>
           {selectedChapterData.chapter.questions.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-12">
               No questions in this chapter at the current points filter.
             </p>
           ) : (
-            <ol className="space-y-3">
+            <ol className="rounded-2xl border border-border bg-card overflow-hidden divide-y divide-border print:border-0 print:divide-y-0 print:space-y-3">
               {selectedChapterData.chapter.questions.map((q) => (
                 <QuestionAnswerCard key={q.question_id} q={q} />
               ))}
@@ -506,28 +507,27 @@ function CheatSheetInner() {
           ) : (
             answerGroups.map((t) => (
               <div key={t.themeName} className="mb-6">
-                <h2 className="flex items-center gap-2 text-sm font-bold text-muted-foreground border-b border-border pb-1.5 mb-1.5">
-                  <span>{themeEmoji(t.themeName)}</span>
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
                   {themeLabel(t.themeName)}
                 </h2>
-                <div className="space-y-1">
+                <ul className="rounded-2xl border border-border bg-card overflow-hidden divide-y divide-border">
                   {t.chapters.map((c) => (
-                    <button
-                      key={c.chapterName}
-                      onClick={() => selectChapter(c.chapterName)}
-                      className="w-full flex items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2.5 text-left text-sm hover:border-primary/50 hover:bg-primary/5 transition-colors"
-                    >
-                      <span className="flex items-center gap-2 min-w-0">
-                        <span>{chapterEmoji(c.chapterName)}</span>
-                        <span className="truncate">{chapterLabel(c.chapterName)}</span>
-                      </span>
-                      <span className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
-                        {c.questions.length}
-                        <span className="text-primary">→</span>
-                      </span>
-                    </button>
+                    <li key={c.chapterName}>
+                      <button
+                        onClick={() => selectChapter(c.chapterName)}
+                        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-secondary transition-colors"
+                      >
+                        <span className="flex-1 min-w-0 truncate text-[15px] font-medium">
+                          {chapterLabel(c.chapterName)}
+                        </span>
+                        <span className="text-[13px] text-muted-foreground tabular shrink-0">
+                          {c.questions.length}
+                        </span>
+                        <ChevronRightIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+                      </button>
+                    </li>
                   ))}
-                </div>
+                </ul>
               </div>
             ))
           )}
@@ -540,15 +540,15 @@ function CheatSheetInner() {
         <div className="hidden print:block">
           {answerGroups.map((t) => (
             <section key={t.themeName} className="mb-8 print:break-before-page">
-              <h2 className="text-lg font-bold border-b-2 border-primary/40 pb-2 mb-4">
-                {themeEmoji(t.themeName)} {themeLabel(t.themeName)}
+              <h2 className="font-display font-bold text-[22px] leading-7 border-b border-border pb-2 mb-4">
+                {themeLabel(t.themeName)}
               </h2>
               {t.chapters.map((c) => (
                 <div key={c.chapterName} className="mb-4 print:break-inside-avoid-page">
                   <h3 className="text-sm font-semibold text-muted-foreground mb-2">
-                    {chapterEmoji(c.chapterName)} {chapterLabel(c.chapterName)} ({c.questions.length})
+                    {chapterLabel(c.chapterName)} ({c.questions.length})
                   </h3>
-                  <ol className="space-y-3">
+                  <ol className="rounded-2xl border border-border bg-card overflow-hidden divide-y divide-border print:border-0 print:divide-y-0 print:space-y-3">
                     {c.questions.map((q) => (
                       <QuestionAnswerCard key={q.question_id} q={q} />
                     ))}
@@ -564,28 +564,28 @@ function CheatSheetInner() {
       {tab === "concepts" && (
         <>
           <div className="flex flex-col sm:flex-row gap-2 mb-4 print:hidden">
-            <input
-              type="text"
-              placeholder="Search chapters / key facts..."
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              className="flex-1 border border-border rounded-lg p-2 bg-background text-sm"
-            />
-            <button
-              onClick={() => setConceptTocOpen((o) => !o)}
-              className="text-sm font-medium border border-primary/40 text-primary rounded-lg px-3 py-2 hover:bg-primary/10 whitespace-nowrap"
-            >
+            <div className="relative flex-1">
+              <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search chapters and key facts"
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+                className="w-full h-11 rounded-[10px] border border-input bg-card pl-9 pr-3 text-base placeholder:text-muted-foreground"
+              />
+            </div>
+            <Button variant="outline" onClick={() => setConceptTocOpen((o) => !o)} aria-expanded={conceptTocOpen}>
               {conceptTocOpen ? "Hide" : "Show"} contents
-            </button>
+            </Button>
           </div>
 
           {conceptTocOpen && (
-            <div className="rounded-xl border border-border bg-card p-3 mb-4 text-sm print:hidden">
+            <div className="rounded-2xl border border-border bg-card px-4 py-3 mb-4 text-sm print:hidden">
               <ul className="space-y-1">
                 {conceptGroups.map((t) => (
                   <li key={t.themeName}>
-                    <a href={`#theme-${t.themeName}`} className="font-medium text-primary hover:underline">
-                      {themeEmoji(t.themeName)} {themeLabel(t.themeName)}
+                    <a href={`#theme-${t.themeName}`} className="font-semibold hover:underline underline-offset-2">
+                      {themeLabel(t.themeName)}
                     </a>{" "}
                     <span className="text-muted-foreground">({t.chapters.length})</span>
                     <ul className="ml-4 mt-0.5 space-y-0.5">
@@ -593,9 +593,9 @@ function CheatSheetInner() {
                         <li key={c.chapterName}>
                           <a
                             href={`#ch-${c.chapterName}`}
-                            className="text-xs text-muted-foreground hover:text-primary hover:underline"
+                            className="text-[13px] text-muted-foreground hover:text-foreground hover:underline underline-offset-2"
                           >
-                            {chapterEmoji(c.chapterName)} {chapterLabel(c.chapterName)}
+                            {chapterLabel(c.chapterName)}
                           </a>
                         </li>
                       ))}
@@ -611,21 +611,20 @@ function CheatSheetInner() {
           ) : (
             conceptGroups.map((t) => (
               <section key={t.themeName} id={`theme-${t.themeName}`} className="mb-8 print:break-before-page">
-                <h2 className="flex items-center gap-2 text-lg font-bold border-b-2 border-primary/40 pb-2 mb-4">
-                  <span>{themeEmoji(t.themeName)}</span>
+                <h2 className="flex items-center gap-2 font-display font-bold text-[22px] leading-7 border-b border-border pb-2 mb-4">
                   {themeLabel(t.themeName)}
-                  <span className="text-sm font-normal text-muted-foreground">({t.chapters.length})</span>
+                  <span className="font-sans text-sm font-normal text-muted-foreground tabular">· {t.chapters.length}</span>
                 </h2>
                 {t.chapters.map((c) => (
                   <div
                     key={c.chapterName}
                     id={`ch-${c.chapterName}`}
-                    className="mb-3 rounded-xl border border-border bg-card p-3 print:break-inside-avoid"
+                    className="mb-3 rounded-2xl border border-border bg-card px-4 py-3 print:break-inside-avoid"
                   >
-                    <h3 className="text-sm font-semibold mb-1.5">
-                      {chapterEmoji(c.chapterName)} {chapterLabel(c.chapterName)}
+                    <h3 className="text-[15px] font-semibold mb-1.5">
+                      {chapterLabel(c.chapterName)}
                     </h3>
-                    <ul className="text-sm space-y-1 list-disc pl-4">
+                    <ul className="text-[15px] leading-[22px] space-y-1.5 list-disc pl-5 marker:text-muted-foreground">
                       {(CHAPTER_CONCEPTS[c.chapterName] ?? []).map((bullet, i) => (
                         <li key={i}>{bullet}</li>
                       ))}
@@ -654,10 +653,10 @@ function CheatSheetInner() {
             your own personal study, not redistributed anywhere else.{" "}
           </>
         ) : (
-          "Original summaries, written for this app - not extracted from the catalog. "
+          "Original summaries, written for this app — not extracted from the catalogue. "
         )}
-        <Link href="/practice" className="underline">
-          Back to Practice →
+        <Link href="/practice" className="underline underline-offset-2">
+          Back to Practice
         </Link>
       </p>
     </main>

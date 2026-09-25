@@ -3,81 +3,82 @@
 @tailwind utilities;
 
 @layer base {
+  /* Road-sign palette: an off-white plate, black type, priority-road
+     yellow as the one brand colour, blue for "correct" and orange-red for
+     "wrong" (never green vs. red, so right/wrong also reads for red-green
+     colour blindness). Light by default, dark when the device asks for it.
+     Values mirror the Driving Theory design system's tokens.json. */
   :root {
-    /* Dark, neon-green brand look: near-black surfaces, white text, a
-       glowing spring-green primary. This is the app's one committed look
-       (not gated behind system light/dark), per the requested direction. */
-    --background: 160 20% 5%;
-    --foreground: 120 30% 96%;
-    --card: 160 15% 9%;
-    --card-foreground: 120 30% 96%;
-    --popover: 160 18% 7%;
-    --popover-foreground: 120 30% 96%;
-    --primary: 150 100% 50%; /* neon spring green */
-    --primary-foreground: 160 40% 6%;
-    --secondary: 160 12% 14%;
-    --secondary-foreground: 120 20% 92%;
-    --muted: 160 12% 14%;
-    --muted-foreground: 150 8% 62%;
-    --accent: 174 100% 45%; /* neon cyan, used sparingly */
-    --accent-foreground: 160 40% 6%;
-    --success: 150 100% 50%;
-    --success-foreground: 160 40% 6%;
-    --warning: 45 100% 55%;
-    --warning-foreground: 160 40% 6%;
-    --destructive: 346 100% 62%;
+    --background: 43 28% 95.1%; /* paper #f6f4ef */
+    --foreground: 216 10.2% 9.6%; /* ink #16181b */
+    --card: 0 0% 100%; /* surface */
+    --card-foreground: 216 10.2% 9.6%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 216 10.2% 9.6%;
+    --primary: 216 10.2% 9.6%; /* ink - primary buttons, active states */
+    --primary-foreground: 43 28% 95.1%;
+    --secondary: 42 22.7% 91.4%; /* surface-sunken #eeebe4 */
+    --secondary-foreground: 216 10.2% 9.6%;
+    --muted: 42 22.7% 91.4%;
+    --muted-foreground: 222 5.3% 36.9%; /* ink-muted #595c63 */
+    --accent: 42 22.7% 91.4%;
+    --accent-foreground: 216 10.2% 9.6%;
+    --success: 194 84.8% 28.4%; /* correct #0b6a86 */
+    --success-foreground: 0 0% 100%;
+    --warning: 39 100% 27.1%; /* caution #8a5a00 */
+    --warning-foreground: 0 0% 100%;
+    --destructive: 18 84.5% 38%; /* incorrect #b3400f */
     --destructive-foreground: 0 0% 100%;
-    --border: 160 12% 20%;
-    --input: 160 12% 20%;
-    --ring: 150 100% 50%;
+    --signal: 47 100% 61.6%; /* road-sign yellow #ffd43b - fills only, never text */
+    --signal-foreground: 216 10.2% 9.6%;
+    --signal-soft: 49 100% 87.5%; /* #fff3bf */
+    --raised: 0 0% 100%; /* active segment */
+    --border: 41 20.5% 84.7%; /* hairlines #e0dbd0 */
+    --input: 40 7.1% 50.6%; /* control borders, 3:1 #8a8478 */
+    --ring: 216 10.2% 9.6%;
     --radius: 1rem;
   }
 
-  .dark {
-    /* Same palette - dark is the only mode, kept for components that key
-       off .dark explicitly. */
-    --background: 160 20% 5%;
-    --foreground: 120 30% 96%;
-    --card: 160 15% 9%;
-    --card-foreground: 120 30% 96%;
-    --popover: 160 18% 7%;
-    --popover-foreground: 120 30% 96%;
-    --primary: 150 100% 50%;
-    --primary-foreground: 160 40% 6%;
-    --secondary: 160 12% 14%;
-    --secondary-foreground: 120 20% 92%;
-    --muted: 160 12% 14%;
-    --muted-foreground: 150 8% 62%;
-    --accent: 174 100% 45%;
-    --accent-foreground: 160 40% 6%;
-    --success: 150 100% 50%;
-    --success-foreground: 160 40% 6%;
-    --warning: 45 100% 55%;
-    --warning-foreground: 160 40% 6%;
-    --destructive: 346 100% 62%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 160 12% 20%;
-    --input: 160 12% 20%;
-    --ring: 150 100% 50%;
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --background: 220 7.7% 7.6%; /* #121315 */
+      --foreground: 45 19% 91.8%; /* #eeece6 */
+      --card: 216 8.5% 11.6%; /* #1b1d20 */
+      --card-foreground: 45 19% 91.8%;
+      --popover: 216 8.5% 11.6%;
+      --popover-foreground: 45 19% 91.8%;
+      --primary: 45 19% 91.8%;
+      --primary-foreground: 220 7.7% 7.6%;
+      --secondary: 214 8.6% 15.9%; /* #25282c */
+      --secondary-foreground: 45 19% 91.8%;
+      --muted: 214 8.6% 15.9%;
+      --muted-foreground: 222 6% 67.1%; /* #a6a9b0 */
+      --accent: 214 8.6% 15.9%;
+      --accent-foreground: 45 19% 91.8%;
+      --success: 192 66.3% 61.6%; /* #5cc3de */
+      --success-foreground: 220 7.7% 7.6%;
+      --warning: 39 86.5% 62.2%; /* #f2b84b */
+      --warning-foreground: 220 7.7% 7.6%;
+      --destructive: 18 83.1% 65.3%; /* #f08a5d */
+      --destructive-foreground: 220 7.7% 7.6%;
+      --signal: 46 90.3% 59.4%; /* #f5c93a */
+      --signal-foreground: 216 10.2% 9.6%;
+      --signal-soft: 48 53.2% 15.1%; /* #3b3312 */
+      --raised: 216 7.9% 24.7%; /* #3a3e44 */
+      --border: 218 8% 19.6%; /* #2e3136 */
+      --input: 220 6.4% 45.7%; /* #6d727c */
+      --ring: 45 19% 91.8%;
+    }
+    html {
+      color-scheme: dark;
+    }
   }
 
-  html {
-    color-scheme: dark;
-  }
-
-  /* The app is a fixed dark neon theme everywhere except when printing:
-     white paper, black ink is what a physical printout (or "save as PDF"
-     for offline study, e.g. the Cheat Sheet page) actually needs, and most
-     printers/PDF exports skip background colors anyway. Overriding the
-     same CSS variables every component already reads means every
-     bg-card/text-foreground/border-border/etc. utility flips correctly
-     without hunting down each one individually. */
+  /* Printing (e.g. the Cheat Sheet) is always black on white, whatever
+     the screen theme - printers and PDF exports mostly skip backgrounds.
+     Deliberately :root only (not ".dark"): Tailwind's purge drops a whole
+     selector list if one of its class tokens never appears in source. */
   @media print {
-    /* Deliberately :root only, not ", .dark" - Tailwind's content-based
-       purge drops an entire rule if any selector in its list is a class
-       token that never appears literally in scanned source (".dark" is
-       never applied anywhere; this app is always dark via :root alone),
-       and it takes the whole selector list with it, :root included. */
     :root {
       --background: 0 0% 100%;
       --foreground: 0 0% 0%;
@@ -85,26 +86,49 @@
       --card-foreground: 0 0% 0%;
       --popover: 0 0% 100%;
       --popover-foreground: 0 0% 0%;
-      --primary: 150 100% 22%;
+      --primary: 0 0% 0%;
       --primary-foreground: 0 0% 100%;
       --secondary: 0 0% 94%;
       --secondary-foreground: 0 0% 0%;
       --muted: 0 0% 94%;
       --muted-foreground: 0 0% 30%;
-      --accent: 174 100% 22%;
-      --accent-foreground: 0 0% 100%;
-      --success: 150 100% 20%;
+      --accent: 0 0% 94%;
+      --accent-foreground: 0 0% 0%;
+      --success: 194 84.8% 22%;
       --success-foreground: 0 0% 100%;
       --warning: 35 100% 28%;
       --warning-foreground: 0 0% 100%;
-      --destructive: 346 100% 32%;
+      --destructive: 18 84.5% 32%;
       --destructive-foreground: 0 0% 100%;
+      --signal: 47 100% 61.6%;
+      --signal-foreground: 0 0% 0%;
+      --signal-soft: 49 100% 90%;
+      --raised: 0 0% 100%;
       --border: 0 0% 65%;
-      --input: 0 0% 65%;
-      --ring: 150 100% 22%;
+      --input: 0 0% 45%;
+      --ring: 0 0% 0%;
     }
     html {
       color-scheme: light;
+    }
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* One focus style everywhere: a paper-coloured gap, then solid ink. */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
     }
   }
 }
@@ -116,24 +140,28 @@
   .safe-bottom {
     padding-bottom: env(safe-area-inset-bottom);
   }
-  .glow-primary {
-    box-shadow: 0 0 16px hsl(var(--primary) / 0.5), 0 0 2px hsl(var(--primary) / 0.8);
+  /* Page content clears the phone tab bar (4rem + the home-indicator
+     inset); from md up navigation lives in the header instead. */
+  .pb-tabbar {
+    padding-bottom: calc(4rem + env(safe-area-inset-bottom));
   }
-  .glow-text {
-    text-shadow: 0 0 20px hsl(var(--primary) / 0.6);
+  /* A fixed action bar that docks directly above the phone tab bar. */
+  .bottom-tabbar {
+    bottom: calc(4rem + env(safe-area-inset-bottom));
   }
-  .glow-border {
-    box-shadow: 0 0 0 1px hsl(var(--primary) / 0.4), 0 0 14px hsl(var(--primary) / 0.35);
-  }
-
-  /* Neon glow effects are a screen-only affectation - on paper they'd just
-     smear ink for no benefit. */
-  @media print {
-    .glow-primary,
-    .glow-text,
-    .glow-border {
-      box-shadow: none !important;
-      text-shadow: none !important;
+  @media (min-width: 768px) {
+    .pb-tabbar {
+      padding-bottom: 0;
     }
+    .bottom-tabbar {
+      bottom: 0;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+  }
+  .shadow-bar {
+    box-shadow: 0 -1px 0 hsl(var(--border)), 0 -8px 24px -8px hsl(var(--foreground) / 0.12);
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
   }
 }

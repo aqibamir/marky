@@ -1,7 +1,23 @@
 import "./globals.css";
 import type { Metadata } from "next";
+import { Barlow, Barlow_Semi_Condensed } from "next/font/google";
 import Link from "next/link";
 import ModeSwitcher from "@/components/ModeSwitcher";
+import BrandMark from "@/components/BrandMark";
+import { TabBar, TopNav } from "@/components/MainNav";
+
+const sans = Barlow({
+  subsets: ["latin", "latin-ext"],
+  weight: ["400", "500", "600"],
+  variable: "--font-sans",
+  display: "swap",
+});
+const display = Barlow_Semi_Condensed({
+  subsets: ["latin", "latin-ext"],
+  weight: ["600", "700"],
+  variable: "--font-display",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "German Driving Theory",
@@ -11,7 +27,10 @@ export const metadata: Metadata = {
     initialScale: 1,
     viewportFit: "cover",
   },
-  themeColor: "#0b1512",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f6f4ef" },
+    { media: "(prefers-color-scheme: dark)", color: "#121315" },
+  ],
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -25,35 +44,23 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${sans.variable} ${display.variable}`}>
       <body className="font-sans antialiased bg-background text-foreground min-h-screen flex flex-col">
-        <header className="safe-top sticky top-0 z-20 border-b border-border bg-background/80 backdrop-blur print:hidden">
-          <div className="max-w-4xl mx-auto px-2 sm:px-4">
-            <div className="flex items-center justify-between h-14 px-2">
-              <Link href="/" className="font-bold tracking-tight shrink-0">
-                🚗 Driving Theory
-              </Link>
-              <ModeSwitcher />
-            </div>
-            <nav className="flex text-sm font-medium border-t border-border -mx-2 sm:mx-0">
-              {[
-                ["/practice", "Practice"],
-                ["/history", "History"],
-                ["/insights", "Insights"],
-                ["/cheatsheet", "Cheat Sheet"],
-              ].map(([href, label]) => (
-                <Link
-                  key={href}
-                  href={href}
-                  className="flex-1 text-center py-3 hover:text-primary hover:bg-secondary/50 active:bg-secondary transition-colors"
-                >
-                  {label}
-                </Link>
-              ))}
-            </nav>
+        <header className="safe-top sticky top-0 z-20 border-b border-border bg-background print:hidden">
+          <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2.5 font-display font-bold text-[19px] tracking-tight whitespace-nowrap"
+            >
+              <BrandMark />
+              Driving Theory
+            </Link>
+            <TopNav />
+            <ModeSwitcher />
           </div>
         </header>
-        <div className="flex-1 flex flex-col">{children}</div>
+        <div className="flex-1 flex flex-col pb-tabbar">{children}</div>
+        <TabBar />
       </body>
     </html>
   );

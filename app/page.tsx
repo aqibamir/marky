@@ -5,9 +5,9 @@ import {
   isGrundstoff,
   isNumericAnswerQuestion,
   questionMediaType,
-  themeEmoji,
   themeLabel,
 } from "@/lib/drivingQuestions";
+import { ArrowRightIcon } from "@radix-ui/react-icons";
 import { Button } from "@/components/ui/button";
 import DueReviewBanner from "@/components/DueReviewBanner";
 
@@ -30,166 +30,127 @@ export default async function Home() {
 
   return (
     <main className="flex-1 flex flex-col">
-      <section className="px-4 py-16">
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight leading-tight glow-text">
-            German Driving
-            <br />
-            <span className="text-primary">Theory Test</span>
+      <div className="max-w-4xl w-full mx-auto px-4 pt-8 pb-12 sm:pt-14">
+        <section className="max-w-xl">
+          <h1 className="font-display font-bold text-[40px] leading-[42px] sm:text-[56px] sm:leading-[56px] tracking-tight">
+            Pass the German theory test.
           </h1>
-          <p className="mt-4 text-muted-foreground max-w-md">
-            Every official Fragenkatalog question, with photos and hazard
-            clips where the exam has them. Practice by points, by theme, or
-            just shuffle the whole deck - and see exactly where you keep
+          <p className="mt-3 text-muted-foreground text-[17px] leading-relaxed">
+            Every official Fragenkatalog question, with the photos and hazard clips the
+            exam uses. Practise by category or points, and see exactly where you keep
             slipping up.
           </p>
-          <div className="mt-8 flex flex-wrap gap-3">
+          <div className="mt-6 flex flex-col sm:flex-row gap-2">
             <Button asChild size="lg">
-              <Link href="/practice">Start practicing →</Link>
+              <Link href="/practice">
+                Start practising <ArrowRightIcon className="h-4 w-4" />
+              </Link>
             </Button>
             <Button asChild size="lg" variant="outline">
               <Link href="/cheatsheet">Browse all questions</Link>
             </Button>
           </div>
+        </section>
 
-          <DueReviewBanner />
+        <DueReviewBanner />
 
-          <div className="mt-12 grid grid-cols-2 sm:grid-cols-4 gap-6 border-t border-border pt-8">
-            <Stat value={questions.length} label="questions" />
-            <Stat value={themeCount} label="themes" />
-            <Stat value={mediaCount} label="with photo/video" />
-            <Stat value="DE / EN" label="languages" />
-          </div>
-        </div>
-      </section>
+        <dl className="mt-6 grid grid-cols-3 gap-2">
+          <Stat value={questions.length.toLocaleString("en")} label="questions" />
+          <Stat value={themeCount} label="categories" />
+          <Stat value={mediaCount.toLocaleString("en")} label="with photo or video" />
+        </dl>
 
-      <section className="px-4 py-10">
-        <div className="max-w-4xl mx-auto">
-          <h2 className="font-semibold text-lg mb-4">Practice by exam part</h2>
-          <div className="grid grid-cols-2 gap-3 mb-8">
-            <Link
+        <Section title="By exam part">
+          <div className="grid grid-cols-2 gap-2">
+            <Tile
               href="/practice?part=grundstoff"
-              className="rounded-2xl p-4 border border-primary/30 bg-primary/5 hover:shadow-md transition"
-            >
-              <div className="text-2xl">📚</div>
-              <div className="font-medium text-sm mt-1">Basic knowledge</div>
-              <div className="text-xs text-muted-foreground mt-1">
-                Grundstoff · {grundstoffCount} questions
-              </div>
-              <div className="text-xs text-muted-foreground mt-2">
-                Asked in every license class&rsquo;s exam
-              </div>
-            </Link>
-            <Link
+              name="Basic knowledge"
+              sub={`Grundstoff · ${grundstoffCount} questions`}
+              note="Asked in every licence class"
+            />
+            <Tile
               href="/practice?part=zusatzstoff"
-              className="rounded-2xl p-4 border border-accent/30 bg-accent/5 hover:shadow-md transition"
-            >
-              <div className="text-2xl">🚙</div>
-              <div className="font-medium text-sm mt-1">Class-specific</div>
-              <div className="text-xs text-muted-foreground mt-1">
-                Zusatzstoff · {zusatzstoffCount} questions
-              </div>
-              <div className="text-xs text-muted-foreground mt-2">
-                Narrows to your class when Class B mode is on
-              </div>
-            </Link>
+              name="Class-specific"
+              sub={`Zusatzstoff · ${zusatzstoffCount} questions`}
+              note="Narrows to your class in Class B mode"
+            />
           </div>
+        </Section>
 
-          <h2 className="font-semibold text-lg mb-4">Practice by category</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+        <Section title="By category">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {themesByCount.map(([theme, count]) => (
-              <Link
+              <Tile
                 key={theme}
                 href={`/practice?theme=${encodeURIComponent(theme)}`}
-                className="rounded-2xl p-4 border border-border bg-card hover:shadow-md transition"
-              >
-                <div className="text-2xl">{themeEmoji(theme)}</div>
-                <div className="font-medium text-sm mt-1">{themeLabel(theme)}</div>
-                <div className="text-xs text-muted-foreground mt-1">{count} questions</div>
-              </Link>
+                name={themeLabel(theme)}
+                sub={`${count} questions`}
+              />
             ))}
           </div>
+        </Section>
 
-          <h2 className="font-semibold text-lg mb-4">Practice by type</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
-            <Link
-              href="/practice?media=video"
-              className="rounded-2xl p-4 border border-border bg-card hover:shadow-md transition"
-            >
-              <div className="text-2xl">🎬</div>
-              <div className="font-medium text-sm mt-1">Hazard videos</div>
-              <div className="text-xs text-muted-foreground mt-1">{videoCount} questions</div>
-            </Link>
-            <Link
-              href="/practice?media=image"
-              className="rounded-2xl p-4 border border-border bg-card hover:shadow-md transition"
-            >
-              <div className="text-2xl">🖼️</div>
-              <div className="font-medium text-sm mt-1">Picture questions</div>
-              <div className="text-xs text-muted-foreground mt-1">{imageCount} questions</div>
-            </Link>
-            <Link
-              href="/practice?numeric=1"
-              className="rounded-2xl p-4 border border-border bg-card hover:shadow-md transition"
-            >
-              <div className="text-2xl">🔢</div>
-              <div className="font-medium text-sm mt-1">Numbers & measurements</div>
-              <div className="text-xs text-muted-foreground mt-1">{numericCount} questions</div>
-            </Link>
-            <Link
-              href="/practice?media=none"
-              className="rounded-2xl p-4 border border-border bg-card hover:shadow-md transition"
-            >
-              <div className="text-2xl">📝</div>
-              <div className="font-medium text-sm mt-1">Text only</div>
-              <div className="text-xs text-muted-foreground mt-1">
-                {questions.length - mediaCount} questions
-              </div>
-            </Link>
+        <Section title="By question type">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <Tile href="/practice?media=video" name="Hazard videos" sub={`${videoCount} questions`} />
+            <Tile href="/practice?media=image" name="Picture questions" sub={`${imageCount} questions`} />
+            <Tile href="/practice?numeric=1" name="Numbers & distances" sub={`${numericCount} questions`} />
+            <Tile href="/practice?media=none" name="Text only" sub={`${questions.length - mediaCount} questions`} />
           </div>
+        </Section>
 
-          <h2 className="font-semibold text-lg mb-4">Questions by points</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <Section title="By points">
+          <div className="grid grid-cols-4 gap-2">
             {Array.from(grouped.entries()).map(([points, qs]) => (
               <Link
                 key={points}
                 href={`/practice?points=${points}`}
-                className={`rounded-2xl p-4 border transition hover:shadow-md ${pointsStyle(
-                  points
-                )}`}
+                className={`rounded-[10px] border px-3 py-3 transition-colors ${
+                  points === 5
+                    ? "bg-signal border-signal text-signal-foreground hover:bg-signal/90"
+                    : "bg-card border-border hover:bg-secondary"
+                }`}
               >
-                <div className="text-2xl font-bold">{points}</div>
-                <div className="text-xs opacity-70">
-                  {points === 1 ? "Punkt" : "Punkte"}
+                <div className="font-display font-bold text-[32px] leading-9 tabular">{points}</div>
+                <div className={`text-[13px] ${points === 5 ? "" : "text-muted-foreground"}`}>
+                  {points === 1 ? "Punkt" : "Punkte"} · {qs.length}
                 </div>
-                <div className="text-xs opacity-70 mt-2">{qs.length} questions</div>
               </Link>
             ))}
           </div>
-        </div>
-      </section>
+        </Section>
+      </div>
     </main>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="mt-10">
+      <h2 className="font-semibold text-[17px] mb-3">{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+function Tile({ href, name, sub, note }: { href: string; name: string; sub: string; note?: string }) {
+  return (
+    <Link
+      href={href}
+      className="flex flex-col gap-0.5 rounded-[10px] border border-border bg-card px-4 py-3 hover:bg-secondary transition-colors"
+    >
+      <span className="font-semibold text-[15px] leading-5">{name}</span>
+      <span className="text-[13px] text-muted-foreground">{sub}</span>
+      {note && <span className="text-[13px] text-muted-foreground">{note}</span>}
+    </Link>
   );
 }
 
 function Stat({ value, label }: { value: string | number; label: string }) {
   return (
-    <div>
-      <div className="text-2xl font-bold text-primary">{value}</div>
-      <div className="text-xs text-muted-foreground">{label}</div>
+    <div className="rounded-[10px] border border-border bg-card px-3 py-3">
+      <dd className="font-display font-semibold text-[28px] leading-8 tabular">{value}</dd>
+      <dt className="text-[13px] text-muted-foreground leading-tight">{label}</dt>
     </div>
   );
-}
-
-function pointsStyle(points: number) {
-  switch (points) {
-    case 5:
-      return "bg-destructive/10 border-destructive/30";
-    case 4:
-      return "bg-warning/10 border-warning/30";
-    case 3:
-      return "bg-accent/10 border-accent/30";
-    default:
-      return "bg-secondary border-border";
-  }
 }

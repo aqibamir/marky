@@ -3,11 +3,20 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
 import {
-  chapterEmoji,
+  ArrowRightIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  Cross2Icon,
+  MagnifyingGlassIcon,
+  ReloadIcon,
+  TrashIcon,
+} from "@radix-ui/react-icons";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Segmented } from "@/components/ui/segmented";
+import {
   chapterLabel,
-  themeEmoji,
   themeLabel,
   type DrivingQuestion,
   type Language,
@@ -46,10 +55,10 @@ function timeAgo(ms: number): string {
   return new Date(ms).toLocaleDateString();
 }
 
+// Ink normally; only a poor run is called out, and the number is always
+// shown, so colour never carries the meaning on its own.
 function accuracyColor(pct: number): string {
-  if (pct >= 80) return "text-success";
-  if (pct >= 50) return "text-warning";
-  return "text-destructive";
+  return pct < 50 ? "text-destructive" : "text-foreground";
 }
 
 function HistoryInner() {
@@ -151,8 +160,8 @@ function HistoryInner() {
     const diff = Math.round((recentAvg - earlierAvg) * 100);
     if (Math.abs(diff) < 3) return "Your accuracy has stayed about the same across your recent runs.";
     return diff > 0
-      ? `📈 You're improving — accuracy is up ${diff} points versus your earlier runs.`
-      : `📉 Accuracy has dropped ${Math.abs(diff)} points versus your earlier runs — worth revisiting your weak topics.`;
+      ? `You're improving — accuracy is up ${diff} points on your earlier runs.`
+      : `Accuracy is down ${Math.abs(diff)} points on your earlier runs — worth revisiting your weak topics.`;
   }, [trend]);
 
   function toggle(id: string) {
@@ -204,6 +213,7 @@ function HistoryInner() {
   if (!questions) {
     return (
       <main className="max-w-2xl mx-auto p-4 space-y-3 w-full">
+        <div className="h-8 w-40 rounded-[10px] bg-secondary animate-pulse" />
         <div className="h-24 rounded-2xl bg-secondary animate-pulse" />
         <div className="h-64 rounded-2xl bg-secondary animate-pulse" />
       </main>
@@ -212,132 +222,119 @@ function HistoryInner() {
 
   return (
     <main className="max-w-2xl mx-auto w-full px-4 pt-4 pb-28 flex-1">
-      <div className="flex items-center justify-between mb-1">
-        <h1 className="text-xl font-bold glow-text">History</h1>
-        <Link href="/insights" className="text-xs underline text-muted-foreground">
-          See patterns →
+      <div className="flex items-end justify-between gap-3 mb-4">
+        <div>
+          <h1 className="font-display font-bold text-[28px] leading-8">History</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            <span className="tabular">{totalAnswered}</span> answered ·{" "}
+            <span className="tabular">{totalCorrect}</span> correct
+          </p>
+        </div>
+        <Link href="/insights" className="text-sm font-semibold underline underline-offset-2">
+          See patterns
         </Link>
       </div>
-      <p className="text-xs text-muted-foreground mb-4">
-        {totalAnswered} answered · {totalCorrect} correct
-      </p>
 
-      <div className="grid grid-cols-2 gap-1 bg-secondary rounded-full p-1 mb-4">
-        <button
-          onClick={() => setTab("questions")}
-          className={`rounded-full py-1.5 text-sm font-medium transition-colors ${
-            tab === "questions" ? "bg-primary text-primary-foreground glow-primary" : "hover:bg-background/60"
-          }`}
-        >
-          Questions
-        </button>
-        <button
-          onClick={() => setTab("runs")}
-          className={`rounded-full py-1.5 text-sm font-medium transition-colors ${
-            tab === "runs" ? "bg-primary text-primary-foreground glow-primary" : "hover:bg-background/60"
-          }`}
-        >
-          Runs {runsList.length > 0 && `(${runsList.length})`}
-        </button>
-      </div>
+      <Segmented
+        label="History view"
+        className="mb-4"
+        options={[
+          { value: "questions" as const, label: "Questions" },
+          { value: "runs" as const, label: `Runs${runsList.length > 0 ? ` · ${runsList.length}` : ""}` },
+        ]}
+        value={tab}
+        onChange={setTab}
+      />
 
       {tab === "questions" ? (
         totalAnswered === 0 ? (
-          <div className="text-center py-16">
-            <p className="text-lg font-medium mb-1">Nothing here yet</p>
-            <p className="text-sm text-muted-foreground mb-4">
-              Answer some questions in Practice and they&rsquo;ll show up here.
-            </p>
-            <Link href="/practice" className="text-primary underline text-sm">
-              Start practicing →
-            </Link>
-          </div>
+          <EmptyState
+            title="Nothing here yet"
+            body="Answer some questions in Practice and they'll show up here."
+            actionHref="/practice"
+            actionLabel="Start practising"
+          />
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-2 mb-3 text-sm">
-              <select
-                className="border border-border rounded-lg p-2 bg-background"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-              >
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              <SelectBox label="Result" value={statusFilter} onChange={(v) => setStatusFilter(v as StatusFilter)}>
                 <option value="all">All results</option>
-                <option value="correct">✓ Correct only</option>
-                <option value="wrong">✕ Wrong only</option>
-              </select>
-              <select
-                className="border border-border rounded-lg p-2 bg-background"
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as SortBy)}
-              >
+                <option value="correct">Correct only</option>
+                <option value="wrong">Wrong only</option>
+              </SelectBox>
+              <SelectBox label="Sort" value={sortBy} onChange={(v) => setSortBy(v as SortBy)}>
                 <option value="recent">Most recent</option>
                 <option value="chapter">By chapter</option>
                 <option value="points">By points</option>
-              </select>
+              </SelectBox>
             </div>
-            <input
-              type="text"
-              placeholder="Search your answered questions..."
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              className="w-full border border-border rounded-lg p-2 bg-background text-sm mb-3"
-            />
+            <div className="relative mb-3">
+              <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search your answered questions"
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+                className="w-full h-11 rounded-[10px] border border-input bg-card pl-9 pr-3 text-base placeholder:text-muted-foreground"
+              />
+            </div>
 
-            <div className="flex items-center justify-between mb-3 text-xs">
-              <div className="flex gap-3">
-                <button onClick={selectAllVisible} className="underline text-primary">
-                  Select all ({rows.length})
+            <div className="flex items-center justify-between mb-2 text-sm">
+              <div className="flex gap-4">
+                <button onClick={selectAllVisible} className="font-semibold underline underline-offset-2">
+                  Select all
                 </button>
                 {selected.size > 0 && (
-                  <button onClick={clearSelection} className="underline text-muted-foreground">
-                    Clear selection
+                  <button onClick={clearSelection} className="text-muted-foreground underline underline-offset-2">
+                    Clear
                   </button>
                 )}
               </div>
-              <span className="text-muted-foreground">{rows.length} shown</span>
+              <span className="text-muted-foreground tabular">{rows.length} shown</span>
             </div>
 
-            <ul className="space-y-2">
+            <ul className="rounded-2xl border border-border bg-card overflow-hidden divide-y divide-border">
               {rows.map(({ q, stat, id }) => {
                 const last = lastAttempt(stat);
                 const correct = last?.correct;
+                const isSelected = selected.has(id);
                 return (
-                  <li
-                    key={id}
-                    className={`rounded-xl border p-3 flex gap-3 items-start cursor-pointer transition-colors ${
-                      selected.has(id)
-                        ? "border-primary bg-primary/5"
-                        : "border-border bg-card"
-                    }`}
-                    onClick={() => toggle(id)}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selected.has(id)}
-                      onChange={() => toggle(id)}
-                      onClick={(e) => e.stopPropagation()}
-                      className="mt-1 shrink-0"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1 flex-wrap">
-                        <span className={correct ? "text-success" : "text-destructive"}>
-                          {correct ? "✓" : "✕"}
-                        </span>
-                        <span>{q.points}</span>
-                        <span>·</span>
-                        <span>
-                          {themeEmoji(q.theme_name)} {themeLabel(q.theme_name)}
-                        </span>
-                        <span>·</span>
-                        <span>{last && timeAgo(last.at)}</span>
-                        {stat.wrongCount > 1 && (
-                          <span className="text-destructive">· missed {stat.wrongCount}×</span>
-                        )}
+                  <li key={id}>
+                    <label
+                      className={`flex gap-3 items-start px-4 py-3 cursor-pointer transition-colors ${
+                        isSelected ? "bg-secondary" : "hover:bg-secondary/60"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggle(id)}
+                        className="mt-1 h-4 w-4 shrink-0 accent-foreground"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[15px] leading-[22px] line-clamp-2">{q.question_text}</p>
+                        <p className="mt-1 flex items-center gap-1.5 flex-wrap text-[13px] text-muted-foreground">
+                          {correct ? (
+                            <span className="inline-flex items-center gap-0.5 font-semibold text-success">
+                              <CheckIcon /> Correct
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-0.5 font-semibold text-destructive">
+                              <Cross2Icon /> Wrong
+                            </span>
+                          )}
+                          <span>·</span>
+                          <span>{q.points}</span>
+                          <span>·</span>
+                          <span>{chapterLabel(q.chapter_name)}</span>
+                          <span>·</span>
+                          <span>{last && timeAgo(last.at)}</span>
+                          {stat.wrongCount > 1 && (
+                            <span className="font-semibold text-destructive">· missed {stat.wrongCount} times</span>
+                          )}
+                        </p>
                       </div>
-                      <p className="text-sm truncate">{q.question_text}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {chapterEmoji(q.chapter_name)} {chapterLabel(q.chapter_name)}
-                      </p>
-                    </div>
+                    </label>
                   </li>
                 );
               })}
@@ -345,29 +342,23 @@ function HistoryInner() {
           </>
         )
       ) : runsList.length === 0 ? (
-        <div className="text-center py-16">
-          <p className="text-lg font-medium mb-1">No runs yet</p>
-          <p className="text-sm text-muted-foreground mb-4">
-            Every time you practice, it&rsquo;s saved here as its own run — so you can
-            see the ones you got wrong and drill just those.
-          </p>
-          <Link href="/practice" className="text-primary underline text-sm">
-            Start a run →
-          </Link>
-        </div>
+        <EmptyState
+          title="No runs yet"
+          body="Every practice session is saved here as its own run, so you can see what you got wrong and drill just those."
+          actionHref="/practice"
+          actionLabel="Start a run"
+        />
       ) : (
         <>
           {trendMessage && (
-            <div className="rounded-xl border border-border bg-card p-3 mb-3">
+            <div className="rounded-2xl border border-border bg-card shadow-sm px-4 py-3 mb-3">
               <p className="text-sm">{trendMessage}</p>
-              <div className="flex items-end gap-1 mt-2 h-10">
+              <div className="flex items-end gap-1 mt-2 h-10" aria-hidden="true">
                 {trend.slice(-20).map(({ run, accuracy }) => (
                   <div
                     key={run.id}
                     title={`${Math.round(accuracy * 100)}% on ${new Date(run.startedAt).toLocaleDateString()}`}
-                    className={`flex-1 rounded-t ${
-                      accuracy >= 0.8 ? "bg-success" : accuracy >= 0.5 ? "bg-warning" : "bg-destructive"
-                    }`}
+                    className={`flex-1 rounded-t-[3px] ${accuracy >= 0.5 ? "bg-signal" : "bg-destructive"}`}
                     style={{ height: `${Math.max(8, accuracy * 100)}%` }}
                   />
                 ))}
@@ -375,40 +366,46 @@ function HistoryInner() {
             </div>
           )}
 
-          <ul className="space-y-2">
+          <ul className="rounded-2xl border border-border bg-card overflow-hidden divide-y divide-border">
             {runsList.map((run) => {
               const { answered, correct, accuracy } = runScore(run);
               const wrongIds = runWrongIds(run);
               const pct = Math.round(accuracy * 100);
               const isOpen = openRunId === run.id;
               return (
-                <li key={run.id} className="rounded-xl border border-border bg-card overflow-hidden">
+                <li key={run.id}>
                   <button
-                    className="w-full text-left p-3 flex items-center justify-between gap-3"
+                    className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-secondary/60 transition-colors"
+                    aria-expanded={isOpen}
                     onClick={() => setOpenRunId(isOpen ? null : run.id)}
                   >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">{run.filterSummary || "Practice run"}</p>
-                      <p className="text-xs text-muted-foreground">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[15px] font-medium truncate">{run.filterSummary || "Practice run"}</p>
+                      <p className="text-[13px] text-muted-foreground">
                         {timeAgo(run.startedAt)} · {answered} answered
                       </p>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className={`text-lg font-bold ${accuracyColor(pct)}`}>{pct}%</p>
-                      <p className="text-xs text-muted-foreground">
-                        {correct}/{answered} correct
+                      <p className={`font-display font-semibold text-xl leading-6 tabular ${accuracyColor(pct)}`}>
+                        {pct}%
+                      </p>
+                      <p className="text-[13px] text-muted-foreground tabular">
+                        {correct}/{answered}
                       </p>
                     </div>
+                    <ChevronDownIcon
+                      className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`}
+                    />
                   </button>
 
                   {isOpen && (
-                    <div className="border-t border-border p-3 space-y-3">
+                    <div className="border-t border-border bg-background px-4 py-3 space-y-3">
                       {wrongIds.length === 0 ? (
-                        <p className="text-sm text-success">🎉 Perfect run — nothing wrong to review.</p>
+                        <p className="text-sm font-medium">Perfect run — nothing to review.</p>
                       ) : (
                         <>
                           <Button size="sm" className="w-full" onClick={() => practiceRunWrong(run)}>
-                            🔁 Practice these {wrongIds.length} wrong ones again
+                            <ReloadIcon /> Practise these {wrongIds.length} again
                           </Button>
                           <ul className="space-y-2">
                             {run.answers
@@ -427,18 +424,25 @@ function HistoryInner() {
                                 return (
                                   <li
                                     key={a.questionId}
-                                    className="rounded-lg bg-secondary/50 p-2.5 text-sm"
+                                    className="rounded-[10px] border border-border bg-card px-3 py-2.5 text-sm"
                                   >
-                                    <p className="font-medium mb-1">{q.question_text}</p>
-                                    <p className="text-xs text-destructive mb-0.5">
-                                      ✕ You answered: {selectedText || "—"}
+                                    <p className="font-medium mb-1.5">{q.question_text}</p>
+                                    <p className="flex gap-1 text-[13px] mb-0.5">
+                                      <Cross2Icon className="mt-0.5 shrink-0 text-destructive" />
+                                      <span>
+                                        <span className="font-semibold text-destructive">You answered:</span>{" "}
+                                        {selectedText || "—"}
+                                      </span>
                                     </p>
-                                    <p className="text-xs text-success mb-1">
-                                      ✓ Correct: {correctText}
+                                    <p className="flex gap-1 text-[13px] mb-1">
+                                      <CheckIcon className="mt-0.5 shrink-0 text-success" />
+                                      <span>
+                                        <span className="font-semibold text-success">Correct:</span> {correctText}
+                                      </span>
                                     </p>
                                     {q.comment && (
-                                      <p className="text-xs text-muted-foreground whitespace-pre-wrap">
-                                        📖 {q.comment}
+                                      <p className="text-[13px] text-muted-foreground whitespace-pre-wrap">
+                                        {q.comment}
                                       </p>
                                     )}
                                   </li>
@@ -457,18 +461,44 @@ function HistoryInner() {
       )}
 
       {tab === "questions" && selected.size > 0 && (
-        <div className="safe-bottom fixed bottom-0 left-0 right-0 border-t border-border bg-background/95 backdrop-blur">
-          <div className="max-w-2xl mx-auto flex items-center justify-between gap-2 px-4 py-3">
+        <div className="fixed inset-x-0 bottom-tabbar z-10 bg-background shadow-bar">
+          <div className="max-w-2xl mx-auto flex items-center gap-2 px-4 py-3">
             <Button variant="outline" onClick={forgetSelected}>
-              🗑 Forget ({selected.size})
+              <TrashIcon /> Forget {selected.size}
             </Button>
-            <Button onClick={practiceSelected} className="glow-primary">
-              Practice selected ({selected.size}) →
+            <Button className="flex-1" onClick={practiceSelected}>
+              Practise {selected.size} selected <ArrowRightIcon className="h-4 w-4" />
             </Button>
           </div>
         </div>
       )}
     </main>
+  );
+}
+
+function SelectBox({
+  label,
+  value,
+  onChange,
+  children,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="relative">
+      <select
+        aria-label={label}
+        className="h-11 w-full appearance-none rounded-[10px] border border-input bg-card pl-3 pr-9 text-base"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        {children}
+      </select>
+      <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+    </div>
   );
 }
 
