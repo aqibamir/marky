@@ -24,10 +24,13 @@
 // from the catalog.
 
 import Link from "next/link";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   ArrowLeftIcon,
+  ArrowRightIcon,
+  BookmarkFilledIcon,
+  BookmarkIcon,
   CheckIcon,
   ChevronRightIcon,
   DownloadIcon,
@@ -57,11 +60,32 @@ import {
   type MediaType,
 } from "@/lib/drivingQuestions";
 import { CHAPTER_CONCEPTS } from "@/lib/chapterConcepts";
+import { loadBookmarks, saveBookmarks, toggleBookmark, type Bookmark } from "@/lib/bookmarks";
 import { APP_SETTINGS_EVENT, loadAppSettings } from "@/lib/appSettings";
 
 type Tab = "answers" | "concepts";
 type PointsFilter = "all" | "2" | "3" | "4" | "5";
 type MediaFilter = "all" | MediaType;
+// How the Answer Key is laid out: the chapter drill-down, every question in
+// one continuous list, or just the bookmarked ones.
+type AnswerView = "chapters" | "all" | "bookmarks";
+
+const ANSWER_VIEW_KEY = "marky:cheatsheet-view";
+// The "All questions" list renders in pages as you scroll rather than all
+// ~2400 questions (with their images) at once - rendering everything in
+// one go froze real phones for seconds (see the note at the top of file).
+const PAGE_SIZE = 40;
+
+function timeAgo(ms: number): string {
+  const min = Math.floor((Date.now() - ms) / 60000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min} min ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr} h ago`;
+  const day = Math.floor(hr / 24);
+  if (day < 30) return day === 1 ? "yesterday" : `${day} days ago`;
+  return new Date(ms).toLocaleDateString();
+}
 
 // Catalog numbers look like "1.1", "1.1.01", "2.6.04" - compare them
 // segment-by-segment as numbers so chapters sort in the same order the
@@ -120,22 +144,58 @@ function groupByThemeAndChapter(list: DrivingQuestion[]): ThemeGroup[] {
   return themes;
 }
 
-function QuestionAnswerCard({ q, showChapter }: { q: DrivingQuestion; showChapter?: boolean }) {
+function QuestionAnswerCard({
+  q,
+  showChapter,
+  bookmarked,
+  onToggleBookmark,
+  highlight,
+  footer,
+}: {
+  q: DrivingQuestion;
+  showChapter?: boolean;
+  bookmarked?: boolean;
+  onToggleBookmark?: (questionNumber: string) => void;
+  highlight?: boolean;
+  footer?: React.ReactNode;
+}) {
   const isFreeEntry = q.options.length === 0;
   return (
-    <li className="px-4 py-3 print:break-inside-avoid">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1.5 flex-wrap">
-        <span className="tabular">{q.question_number}</span>
-        <span className={`inline-flex items-center h-5 px-2 rounded-full font-semibold ${pointsBadgeClass(q.pointsValue)}`}>
-          {q.points}
+    <li
+      id={`q-${q.question_number}`}
+      className={`relative px-4 py-3 scroll-mt-24 print:break-inside-avoid transition-colors ${
+        highlight ? "bg-signal-soft" : ""
+      }`}
+    >
+      {bookmarked && (
+        <span className="absolute left-0 top-3 bottom-3 w-1 rounded-r bg-signal print:hidden" aria-hidden="true" />
+      )}
+      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1.5">
+        <span className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+          <span className="tabular">{q.question_number}</span>
+          <span className={`inline-flex items-center h-5 px-2 rounded-full font-semibold ${pointsBadgeClass(q.pointsValue)}`}>
+            {q.points}
+          </span>
+          {showChapter && (
+            <>
+              <span>·</span>
+              <span>{chapterLabel(q.chapter_name)}</span>
+            </>
+          )}
         </span>
-        {showChapter && (
-          <>
-            <span>·</span>
-            <span>
-              {chapterLabel(q.chapter_name)}
-            </span>
-          </>
+        {onToggleBookmark && (
+          <button
+            type="button"
+            onClick={() => onToggleBookmark(q.question_number)}
+            aria-pressed={bookmarked}
+            aria-label={bookmarked ? "Remove bookmark" : "Bookmark this question"}
+            title={bookmarked ? "Remove bookmark" : "Bookmark - pick up here next time"}
+            className={`-my-2 -mr-2 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] transition-colors hover:bg-secondary print:hidden ${
+              bookmarked ? "text-foreground" : "text-muted-foreground"
+            }`}
+          >
+            {bookmarked ? <BookmarkFilledIcon className="h-[18px] w-[18px]" /> : <BookmarkIcon className="h-[18px] w-[18px]" />}
+          </button>
         )}
       </div>
       {(q.image_urls?.length || q.video_urls?.length) ? (
@@ -181,6 +241,7 @@ function QuestionAnswerCard({ q, showChapter }: { q: DrivingQuestion; showChapte
           Source
         </a>
       )}
+      {footer}
     </li>
   );
 }
@@ -205,6 +266,41 @@ function CheatSheetInner() {
   const [selectedChapter, setSelectedChapter] = useState<string | null>(null);
   const [conceptTocOpen, setConceptTocOpen] = useState(false);
   const [printFull, setPrintFull] = useState(false);
+  const [answerView, setAnswerView] = useState<AnswerView>("chapters");
+  const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [pendingJump, setPendingJump] = useState<string | null>(null);
+  const [highlighted, setHighlighted] = useState<string | null>(null);
+  const pendingJumpRef = useRef<string | null>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setBookmarks(loadBookmarks());
+    try {
+      const v = window.localStorage.getItem(ANSWER_VIEW_KEY);
+      if (v === "chapters" || v === "all" || v === "bookmarks") setAnswerView(v);
+    } catch {
+      // ignore - falls back to the chapter view
+    }
+  }, []);
+
+  function changeAnswerView(v: AnswerView) {
+    setAnswerView(v);
+    setSelectedChapter(null);
+    try {
+      window.localStorage.setItem(ANSWER_VIEW_KEY, v);
+    } catch {
+      // ignore
+    }
+  }
+
+  function onToggleBookmark(questionNumber: string) {
+    setBookmarks((prev) => {
+      const next = toggleBookmark(prev, questionNumber);
+      saveBookmarks(next);
+      return next;
+    });
+  }
 
   useEffect(() => {
     const t = searchParams.get("tab");
@@ -336,7 +432,9 @@ function CheatSheetInner() {
   const answerGroups = useMemo(() => groupByThemeAndChapter(answerPool), [answerPool]);
   const totalAnswerQuestions = answerPool.length;
 
-  const searchActive = tab === "answers" && keyword.trim() !== "";
+  // In the chapter view, typing a search swaps the chapter picker for a
+  // flat list of matches; the All and Bookmarks views filter in place.
+  const searchActive = tab === "answers" && answerView === "chapters" && keyword.trim() !== "";
   const searchResults = useMemo(() => {
     if (!searchActive) return [];
     const kw = keyword.trim().toLowerCase();
@@ -344,6 +442,104 @@ function CheatSheetInner() {
       .filter((q) => q.question_text.toLowerCase().includes(kw))
       .sort((a, b) => compareDotted(a.chapter_number, b.chapter_number) || compareDotted(a.question_number, b.question_number));
   }, [answerPool, keyword, searchActive]);
+
+  // "All questions": every filtered question in catalogue order, no chapter
+  // step in between.
+  const flatList = useMemo(() => {
+    const kw = keyword.trim().toLowerCase();
+    const list = kw ? answerPool.filter((q) => q.question_text.toLowerCase().includes(kw)) : answerPool;
+    return [...list].sort(
+      (a, b) => compareDotted(a.chapter_number, b.chapter_number) || compareDotted(a.question_number, b.question_number)
+    );
+  }, [answerPool, keyword]);
+
+  const bookmarkedNumbers = useMemo(() => new Set(bookmarks.map((b) => b.questionNumber)), [bookmarks]);
+
+  // Bookmarks resolve against the whole licence-scoped catalogue, not the
+  // filtered pool, so a filter never hides one; newest first.
+  const bookmarkedList = useMemo(() => {
+    const byNumber = new Map(scoped.map((q) => [q.question_number, q]));
+    const kw = keyword.trim().toLowerCase();
+    return bookmarks
+      .map((b) => ({ bookmark: b, q: byNumber.get(b.questionNumber) }))
+      .filter((x): x is { bookmark: Bookmark; q: DrivingQuestion } => Boolean(x.q))
+      .filter(({ q }) => !kw || q.question_text.toLowerCase().includes(kw));
+  }, [bookmarks, scoped, keyword]);
+
+  const latestBookmark = useMemo(() => {
+    const byNumber = new Map(scoped.map((q) => [q.question_number, q]));
+    for (const b of bookmarks) {
+      const q = byNumber.get(b.questionNumber);
+      if (q) return { bookmark: b, q };
+    }
+    return null;
+  }, [bookmarks, scoped]);
+
+  // Start the All list from the top again whenever what it shows changes -
+  // except mid-jump, when the jump itself decides how much to render.
+  useEffect(() => {
+    if (!pendingJumpRef.current) setVisibleCount(PAGE_SIZE);
+  }, [flatList]);
+
+  // Render the next page as the end of the list scrolls into view.
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || tab !== "answers" || answerView !== "all") return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setVisibleCount((c) => Math.min(c + PAGE_SIZE, flatList.length));
+        }
+      },
+      { rootMargin: "600px 0px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [tab, answerView, flatList.length, visibleCount]);
+
+  // "Continue where you left off": open the All view at a question -
+  // clearing the search/filters if they would hide it - render enough of
+  // the list to include it, then scroll it into view and flash it.
+  function jumpTo(questionNumber: string) {
+    setTab("answers");
+    changeAnswerView("all");
+    setKeyword("");
+    if (!answerPool.some((q) => q.question_number === questionNumber)) resetFilters();
+    pendingJumpRef.current = questionNumber;
+    setPendingJump(questionNumber);
+  }
+
+  useEffect(() => {
+    if (!pendingJump || tab !== "answers" || answerView !== "all") return;
+    const idx = flatList.findIndex((q) => q.question_number === pendingJump);
+    if (idx < 0) {
+      // Filters/search are still being cleared this render; if the list is
+      // already unfiltered the question just isn't in this licence class.
+      if (keyword.trim() === "" && activeFilterCount === 0) {
+        pendingJumpRef.current = null;
+        setPendingJump(null);
+      }
+      return;
+    }
+    if (visibleCount <= idx) {
+      setVisibleCount(idx + PAGE_SIZE);
+      return;
+    }
+    const target = pendingJump;
+    const frame = requestAnimationFrame(() => {
+      document.getElementById(`q-${target}`)?.scrollIntoView({ block: "start" });
+      setHighlighted(target);
+      pendingJumpRef.current = null;
+      setPendingJump(null);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [pendingJump, flatList, visibleCount, tab, answerView, keyword, activeFilterCount]);
+
+  useEffect(() => {
+    if (!highlighted) return;
+    const t = window.setTimeout(() => setHighlighted(null), 2400);
+    return () => window.clearTimeout(t);
+  }, [highlighted]);
 
   const selectedChapterData = useMemo(() => {
     if (!selectedChapter) return null;
@@ -398,7 +594,13 @@ function CheatSheetInner() {
   }
 
   function handlePrint() {
-    if (tab === "concepts" || selectedChapter || searchActive) {
+    if (
+      tab === "concepts" ||
+      selectedChapter ||
+      searchActive ||
+      answerView === "bookmarks" ||
+      (answerView === "all" && keyword.trim() !== "")
+    ) {
       window.print();
     } else {
       setPrintFull(true);
@@ -431,8 +633,12 @@ function CheatSheetInner() {
             {tab === "answers" ? (
               <>
                 {totalAnswerQuestions} question{totalAnswerQuestions === 1 ? "" : "s"}
-                {licenseClass === "B" ? " · Class B" : " · all classes"} — pick a
-                chapter to see its correct answers.
+                {licenseClass === "B" ? " · Class B" : " · all classes"}
+                {answerView === "chapters"
+                  ? " — pick a chapter to see its correct answers."
+                  : answerView === "all"
+                  ? " — every correct answer in one list."
+                  : ` — ${bookmarks.length} bookmarked.`}
               </>
             ) : (
               <>
@@ -603,7 +809,42 @@ function CheatSheetInner() {
         </p>
       </FilterSheet>
 
-      {tab === "answers" && !selectedChapter && (
+      {tab === "answers" && (
+        <Segmented
+          label="Answer key layout"
+          className="mb-3 print:hidden"
+          options={[
+            { value: "chapters" as AnswerView, label: "By chapter" },
+            { value: "all" as AnswerView, label: "All questions" },
+            {
+              value: "bookmarks" as AnswerView,
+              label: `Bookmarks${bookmarks.length > 0 ? ` · ${bookmarks.length}` : ""}`,
+            },
+          ]}
+          value={answerView}
+          onChange={changeAnswerView}
+        />
+      )}
+
+      {tab === "answers" && latestBookmark && answerView !== "bookmarks" && (
+        <button
+          type="button"
+          onClick={() => jumpTo(latestBookmark.q.question_number)}
+          className="w-full flex items-center gap-3 rounded-[10px] bg-signal-soft px-4 py-3 mb-3 text-left hover:bg-signal-soft/80 transition-colors print:hidden"
+        >
+          <BookmarkFilledIcon className="h-5 w-5 shrink-0" />
+          <span className="flex-1 min-w-0">
+            <span className="block font-semibold">Continue where you left off</span>
+            <span className="block text-[13px] text-muted-foreground truncate">
+              {latestBookmark.q.question_number} · {chapterLabel(latestBookmark.q.chapter_name)} ·{" "}
+              {timeAgo(latestBookmark.bookmark.at)}
+            </span>
+          </span>
+          <ArrowRightIcon className="h-4 w-4 shrink-0" />
+        </button>
+      )}
+
+      {tab === "answers" && !(answerView === "chapters" && selectedChapter) && (
         <div className="relative mb-3 print:hidden">
           <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input
@@ -627,14 +868,20 @@ function CheatSheetInner() {
           ) : (
             <ol className="rounded-2xl border border-border bg-card overflow-hidden divide-y divide-border print:border-0 print:divide-y-0 print:space-y-3">
               {searchResults.map((q) => (
-                <QuestionAnswerCard key={q.question_id} q={q} showChapter />
+                <QuestionAnswerCard
+                  key={q.question_id}
+                  q={q}
+                  showChapter
+                  bookmarked={bookmarkedNumbers.has(q.question_number)}
+                  onToggleBookmark={onToggleBookmark}
+                />
               ))}
             </ol>
           )}
         </>
       )}
 
-      {tab === "answers" && !searchActive && selectedChapterData && (
+      {tab === "answers" && answerView === "chapters" && !searchActive && selectedChapterData && (
         <>
           <button
             onClick={() => setSelectedChapter(null)}
@@ -658,14 +905,129 @@ function CheatSheetInner() {
           ) : (
             <ol className="rounded-2xl border border-border bg-card overflow-hidden divide-y divide-border print:border-0 print:divide-y-0 print:space-y-3">
               {selectedChapterData.chapter.questions.map((q) => (
-                <QuestionAnswerCard key={q.question_id} q={q} />
+                <QuestionAnswerCard
+                  key={q.question_id}
+                  q={q}
+                  bookmarked={bookmarkedNumbers.has(q.question_number)}
+                  onToggleBookmark={onToggleBookmark}
+                />
               ))}
             </ol>
           )}
         </>
       )}
 
-      {tab === "answers" && !searchActive && !selectedChapterData && (
+      {tab === "answers" && answerView === "all" && (
+        <div className={printFull ? "print:hidden" : undefined}>
+          {flatList.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-sm text-muted-foreground mb-3">
+                {keyword.trim() ? <>No questions match &ldquo;{keyword}&rdquo;.</> : "No questions match these filters."}
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setKeyword("");
+                  resetFilters();
+                }}
+              >
+                Clear search and filters
+              </Button>
+            </div>
+          ) : (
+            <>
+              {keyword.trim() && (
+                <p className="text-xs text-muted-foreground mb-2 print:hidden">
+                  {flatList.length} result{flatList.length === 1 ? "" : "s"} for &ldquo;{keyword}&rdquo;
+                </p>
+              )}
+              <ol className="rounded-2xl border border-border bg-card overflow-hidden divide-y divide-border print:border-0 print:divide-y-0 print:space-y-3">
+                {flatList.slice(0, visibleCount).map((q) => (
+                  <QuestionAnswerCard
+                    key={q.question_id}
+                    q={q}
+                    showChapter
+                    bookmarked={bookmarkedNumbers.has(q.question_number)}
+                    onToggleBookmark={onToggleBookmark}
+                    highlight={highlighted === q.question_number}
+                  />
+                ))}
+              </ol>
+              {visibleCount < flatList.length ? (
+                <div ref={sentinelRef} className="flex flex-col items-center gap-2 py-6 print:hidden">
+                  <span className="text-[13px] text-muted-foreground tabular">
+                    Showing {visibleCount} of {flatList.length}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setVisibleCount((c) => Math.min(c + PAGE_SIZE, flatList.length))}
+                  >
+                    Show more
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-center text-[13px] text-muted-foreground py-6 tabular print:hidden">
+                  All {flatList.length} shown
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {tab === "answers" && answerView === "bookmarks" && (
+        <>
+          {bookmarks.length === 0 ? (
+            <div className="flex flex-col items-center gap-1.5 text-center rounded-2xl border-[1.5px] border-dashed border-input px-4 py-10">
+              <BookmarkIcon className="h-6 w-6 text-muted-foreground mb-1" />
+              <p className="text-[17px] font-semibold">No bookmarks yet</p>
+              <p className="text-sm text-muted-foreground max-w-sm">
+                Tap the bookmark on any question to mark where you stopped. Next time, &ldquo;Continue
+                where you left off&rdquo; takes you straight back there.
+              </p>
+              <Button size="sm" className="mt-3" onClick={() => changeAnswerView("all")}>
+                Browse all questions
+              </Button>
+            </div>
+          ) : bookmarkedList.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-12">
+              {keyword.trim() ? (
+                <>No bookmarked questions match &ldquo;{keyword}&rdquo;.</>
+              ) : (
+                "Your bookmarks aren't in the current licence class."
+              )}
+            </p>
+          ) : (
+            <ol className="rounded-2xl border border-border bg-card overflow-hidden divide-y divide-border print:border-0 print:divide-y-0 print:space-y-3">
+              {bookmarkedList.map(({ q, bookmark }) => (
+                <QuestionAnswerCard
+                  key={q.question_id}
+                  q={q}
+                  showChapter
+                  bookmarked
+                  onToggleBookmark={onToggleBookmark}
+                  footer={
+                    <div className="flex items-center justify-between gap-2 mt-2 text-[13px] text-muted-foreground print:hidden">
+                      <span>Bookmarked {timeAgo(bookmark.at)}</span>
+                      <button
+                        type="button"
+                        onClick={() => jumpTo(q.question_number)}
+                        className="inline-flex items-center gap-1 font-semibold text-foreground underline underline-offset-2"
+                      >
+                        Open in list <ArrowRightIcon />
+                      </button>
+                    </div>
+                  }
+                />
+              ))}
+            </ol>
+          )}
+        </>
+      )}
+
+      {tab === "answers" && answerView === "chapters" && !searchActive && !selectedChapterData && (
         <>
           {answerGroups.length === 0 ? (
             <div className="text-center py-12">
