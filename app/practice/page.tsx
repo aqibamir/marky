@@ -12,7 +12,6 @@ import {
   Cross2Icon,
   ExclamationTriangleIcon,
   MagnifyingGlassIcon,
-  MixerHorizontalIcon,
   PlayIcon,
   ReaderIcon,
   ReloadIcon,
@@ -22,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { Segmented } from "@/components/ui/segmented";
 import QuestionMedia from "@/components/QuestionMedia";
+import { FilterGroup, FilterSheet, FilterSummaryButton } from "@/components/FilterSheet";
 import {
   appliesToLicenseClass,
   chapterLabel,
@@ -703,245 +703,217 @@ function PracticeInner() {
         )}
       </div>
 
-      <button
-        onClick={() => setFiltersOpen(true)}
-        className="w-full flex items-center gap-2 h-10 px-3 mb-3 rounded-full border border-input bg-card text-left text-[13px] font-semibold hover:bg-secondary transition-colors"
+      <FilterSummaryButton summary={filterSummary} onClick={() => setFiltersOpen(true)} className="mb-3" />
+
+      <FilterSheet
+        open={filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        resultLabel={`Show ${total} question${total === 1 ? "" : "s"}`}
       >
-        <MixerHorizontalIcon className="h-4 w-4 shrink-0" />
-        <span className="truncate flex-1">{filterSummary}</span>
-        <span className="text-muted-foreground font-medium shrink-0">Filters</span>
-      </button>
+        <FilterGroup label="Mode" hint={MODE_INFO[mode].hint}>
+          <Segmented
+            label="Mode"
+            options={VISIBLE_MODES.map((m) => ({ value: m, label: MODE_INFO[m].label, title: MODE_INFO[m].hint }))}
+            value={mode}
+            onChange={setMode}
+          />
+        </FilterGroup>
 
-      {filtersOpen && (
-        <div className="fixed inset-0 z-40 bg-black/30 md:flex md:items-center md:justify-center md:p-6" onClick={() => setFiltersOpen(false)}>
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Filters"
-            onClick={(e) => e.stopPropagation()}
-            className="absolute inset-0 md:static md:w-full md:max-w-lg md:max-h-[85vh] md:rounded-2xl md:border md:border-border md:shadow-xl bg-background flex flex-col overflow-hidden"
-          >
-            <div className="safe-top flex items-center justify-between px-4 h-14 border-b border-border shrink-0">
-              <h2 className="font-semibold text-[17px]">Filters</h2>
-              <Button variant="ghost" size="sm" onClick={() => setFiltersOpen(false)}>
-                Done
-              </Button>
+        <FilterGroup label="Category">
+          <div className="flex flex-wrap gap-2">
+            <Chip active={filterTheme === "all"} onClick={() => setFilterTheme("all")}>
+              All
+            </Chip>
+            {themes.map((t) => (
+              <Chip key={t} active={filterTheme === t} onClick={() => setFilterTheme(t)}>
+                {themeLabel(t)}
+              </Chip>
+            ))}
+          </div>
+        </FilterGroup>
+
+        <FilterGroup label="Points">
+          <Segmented
+            label="Points"
+            options={[
+              { value: "all" as PointsFilter, label: "Any" },
+              { value: "2" as PointsFilter, label: "2" },
+              { value: "3" as PointsFilter, label: "3" },
+              { value: "4" as PointsFilter, label: "4" },
+              { value: "5" as PointsFilter, label: "5" },
+            ]}
+            value={filterPoints}
+            onChange={setFilterPoints}
+          />
+        </FilterGroup>
+
+        <FilterGroup label="Order">
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <select
+                aria-label="Order"
+                className="w-full h-11 appearance-none rounded-[10px] border border-input bg-card pl-3 pr-9 text-base"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortBy)}
+              >
+                <option value="points-desc">Points, high to low</option>
+                <option value="points-asc">Points, low to high</option>
+                <option value="theme">Category A–Z</option>
+                <option value="chapter">Chapter</option>
+                <option value="random">Shuffled</option>
+              </select>
+              <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             </div>
+            {sortBy === "random" && (
+              <Button variant="outline" onClick={() => setShuffleSeed((s) => s + 1)}>
+                <ShuffleIcon /> Reshuffle
+              </Button>
+            )}
+          </div>
+        </FilterGroup>
 
-            <div className="flex-1 overflow-y-auto px-4 py-5 space-y-6">
-              <FilterGroup label="Mode" hint={MODE_INFO[mode].hint}>
-                <Segmented
-                  label="Mode"
-                  options={VISIBLE_MODES.map((m) => ({ value: m, label: MODE_INFO[m].label, title: MODE_INFO[m].hint }))}
-                  value={mode}
-                  onChange={setMode}
-                />
-              </FilterGroup>
+        <button
+          onClick={() => setAdvancedOpen((o) => !o)}
+          aria-expanded={advancedOpen}
+          className="w-full flex items-center justify-between gap-3 rounded-[10px] border border-input bg-card px-4 py-3 text-left hover:bg-secondary transition-colors"
+        >
+          <span>
+            <span className="block font-semibold text-[15px]">More filters</span>
+            <span className="block text-[13px] text-muted-foreground">
+              Exam part, chapter, media, topics, keyword
+            </span>
+          </span>
+          <ChevronDownIcon className={`h-4 w-4 shrink-0 transition-transform ${advancedOpen ? "rotate-180" : ""}`} />
+        </button>
 
-              <FilterGroup label="Category">
-                <div className="flex flex-wrap gap-2">
-                  <Chip active={filterTheme === "all"} onClick={() => setFilterTheme("all")}>
-                    All
+        {advancedOpen && (
+          <div className="space-y-6">
+            <FilterGroup label="Exam part">
+              <Segmented
+                label="Exam part"
+                options={(["all", "grundstoff", "zusatzstoff"] as ExamPart[]).map((p) => ({
+                  value: p,
+                  title:
+                    p === "grundstoff"
+                      ? "Grundstoff - basic knowledge, asked in every license class"
+                      : p === "zusatzstoff"
+                      ? "Zusatzstoff - the class-specific half of the exam"
+                      : "Both parts",
+                  label:
+                    p === "all"
+                      ? "Both"
+                      : p === "grundstoff"
+                      ? "Basic"
+                      : licenseClass === "B"
+                      ? "Class B"
+                      : "Class-specific",
+                }))}
+                value={examPart}
+                onChange={setExamPart}
+              />
+            </FilterGroup>
+
+            <FilterGroup label={`Chapter${filterTheme !== "all" ? ` in ${themeLabel(filterTheme)}` : ""}`}>
+              <div className="relative">
+                <select
+                  aria-label="Chapter"
+                  className="w-full h-11 appearance-none rounded-[10px] border border-input bg-card pl-3 pr-9 text-base"
+                  value={filterChapter}
+                  onChange={(e) => setFilterChapter(e.target.value)}
+                >
+                  <option value="all">All chapters</option>
+                  {chapters.map((c) => (
+                    <option key={c} value={c}>
+                      {chapterLabel(c)}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              </div>
+            </FilterGroup>
+
+            <FilterGroup label="Media">
+              <div className="flex flex-wrap gap-2">
+                {([
+                  ["all", "Any"],
+                  ["video", "Video"],
+                  ["image", "Picture"],
+                  ["none", "Text only"],
+                ] as [MediaFilter, string][]).map(([value, label]) => (
+                  <Chip key={value} active={filterMedia === value} onClick={() => setFilterMedia(value)}>
+                    {label}
                   </Chip>
-                  {themes.map((t) => (
-                    <Chip key={t} active={filterTheme === t} onClick={() => setFilterTheme(t)}>
-                      {themeLabel(t)}
-                    </Chip>
+                ))}
+                <Chip active={numericOnly} onClick={() => setNumericOnly(!numericOnly)}>
+                  Numbers only
+                </Chip>
+              </div>
+            </FilterGroup>
+
+            <FilterGroup label={`Topics${filterTags.length > 0 ? ` · ${filterTags.length} selected` : ""}`}>
+              <div className="flex flex-wrap gap-2">
+                {allTags.map((t) => (
+                  <Chip
+                    key={t}
+                    active={filterTags.includes(t)}
+                    onClick={() =>
+                      setFilterTags((prev) =>
+                        prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]
+                      )
+                    }
+                  >
+                    {tagLabel(t)}
+                  </Chip>
+                ))}
+              </div>
+            </FilterGroup>
+
+            <FilterGroup label="Keyword in question text">
+              <div className="relative">
+                <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="e.g. Anhänger, Einbahn, Vorfahrt"
+                  value={keyword}
+                  onChange={(e) => setKeyword(e.target.value)}
+                  className="w-full h-11 rounded-[10px] border border-input bg-card pl-9 pr-3 text-base placeholder:text-muted-foreground"
+                />
+              </div>
+            </FilterGroup>
+
+            <FilterGroup label="Saved filters">
+              {savedFilters.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {savedFilters.map((f) => (
+                    <span
+                      key={f.id}
+                      className="inline-flex items-center h-[34px] rounded-full border border-input bg-card text-[13px] font-semibold overflow-hidden"
+                    >
+                      <button className="pl-3 pr-2 h-full hover:bg-secondary" onClick={() => applySavedFilter(f)}>
+                        {f.name}
+                      </button>
+                      <button
+                        onClick={() => deleteSavedFilter(f.id)}
+                        className="pr-2.5 pl-1 h-full text-muted-foreground hover:text-destructive hover:bg-secondary"
+                        aria-label={`Delete ${f.name}`}
+                      >
+                        <Cross2Icon className="h-3.5 w-3.5" />
+                      </button>
+                    </span>
                   ))}
                 </div>
-              </FilterGroup>
-
-              <FilterGroup label="Points">
-                <Segmented
-                  label="Points"
-                  options={[
-                    { value: "all" as PointsFilter, label: "Any" },
-                    { value: "2" as PointsFilter, label: "2" },
-                    { value: "3" as PointsFilter, label: "3" },
-                    { value: "4" as PointsFilter, label: "4" },
-                    { value: "5" as PointsFilter, label: "5" },
-                  ]}
-                  value={filterPoints}
-                  onChange={setFilterPoints}
-                />
-              </FilterGroup>
-
-              <FilterGroup label="Order">
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <select
-                      aria-label="Order"
-                      className="w-full h-11 appearance-none rounded-[10px] border border-input bg-card pl-3 pr-9 text-base"
-                      value={sortBy}
-                      onChange={(e) => setSortBy(e.target.value as SortBy)}
-                    >
-                      <option value="points-desc">Points, high to low</option>
-                      <option value="points-asc">Points, low to high</option>
-                      <option value="theme">Category A–Z</option>
-                      <option value="chapter">Chapter</option>
-                      <option value="random">Shuffled</option>
-                    </select>
-                    <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  </div>
-                  {sortBy === "random" && (
-                    <Button variant="outline" onClick={() => setShuffleSeed((s) => s + 1)}>
-                      <ShuffleIcon /> Reshuffle
-                    </Button>
-                  )}
-                </div>
-              </FilterGroup>
-
-              <button
-                onClick={() => setAdvancedOpen((o) => !o)}
-                aria-expanded={advancedOpen}
-                className="w-full flex items-center justify-between gap-3 rounded-[10px] border border-input bg-card px-4 py-3 text-left hover:bg-secondary transition-colors"
-              >
-                <span>
-                  <span className="block font-semibold text-[15px]">More filters</span>
-                  <span className="block text-[13px] text-muted-foreground">
-                    Exam part, chapter, media, topics, keyword
-                  </span>
-                </span>
-                <ChevronDownIcon className={`h-4 w-4 shrink-0 transition-transform ${advancedOpen ? "rotate-180" : ""}`} />
-              </button>
-
-              {advancedOpen && (
-                <div className="space-y-6">
-                  <FilterGroup label="Exam part">
-                    <Segmented
-                      label="Exam part"
-                      options={(["all", "grundstoff", "zusatzstoff"] as ExamPart[]).map((p) => ({
-                        value: p,
-                        title:
-                          p === "grundstoff"
-                            ? "Grundstoff - basic knowledge, asked in every license class"
-                            : p === "zusatzstoff"
-                            ? "Zusatzstoff - the class-specific half of the exam"
-                            : "Both parts",
-                        label:
-                          p === "all"
-                            ? "Both"
-                            : p === "grundstoff"
-                            ? "Basic"
-                            : licenseClass === "B"
-                            ? "Class B"
-                            : "Class-specific",
-                      }))}
-                      value={examPart}
-                      onChange={setExamPart}
-                    />
-                  </FilterGroup>
-
-                  <FilterGroup label={`Chapter${filterTheme !== "all" ? ` in ${themeLabel(filterTheme)}` : ""}`}>
-                    <div className="relative">
-                      <select
-                        aria-label="Chapter"
-                        className="w-full h-11 appearance-none rounded-[10px] border border-input bg-card pl-3 pr-9 text-base"
-                        value={filterChapter}
-                        onChange={(e) => setFilterChapter(e.target.value)}
-                      >
-                        <option value="all">All chapters</option>
-                        {chapters.map((c) => (
-                          <option key={c} value={c}>
-                            {chapterLabel(c)}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    </div>
-                  </FilterGroup>
-
-                  <FilterGroup label="Media">
-                    <div className="flex flex-wrap gap-2">
-                      {([
-                        ["all", "Any"],
-                        ["video", "Video"],
-                        ["image", "Picture"],
-                        ["none", "Text only"],
-                      ] as [MediaFilter, string][]).map(([value, label]) => (
-                        <Chip key={value} active={filterMedia === value} onClick={() => setFilterMedia(value)}>
-                          {label}
-                        </Chip>
-                      ))}
-                      <Chip active={numericOnly} onClick={() => setNumericOnly(!numericOnly)}>
-                        Numbers only
-                      </Chip>
-                    </div>
-                  </FilterGroup>
-
-                  <FilterGroup label={`Topics${filterTags.length > 0 ? ` · ${filterTags.length} selected` : ""}`}>
-                    <div className="flex flex-wrap gap-2">
-                      {allTags.map((t) => (
-                        <Chip
-                          key={t}
-                          active={filterTags.includes(t)}
-                          onClick={() =>
-                            setFilterTags((prev) =>
-                              prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]
-                            )
-                          }
-                        >
-                          {tagLabel(t)}
-                        </Chip>
-                      ))}
-                    </div>
-                  </FilterGroup>
-
-                  <FilterGroup label="Keyword in question text">
-                    <div className="relative">
-                      <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <input
-                        type="text"
-                        placeholder="e.g. Anhänger, Einbahn, Vorfahrt"
-                        value={keyword}
-                        onChange={(e) => setKeyword(e.target.value)}
-                        className="w-full h-11 rounded-[10px] border border-input bg-card pl-9 pr-3 text-base placeholder:text-muted-foreground"
-                      />
-                    </div>
-                  </FilterGroup>
-
-                  <FilterGroup label="Saved filters">
-                    {savedFilters.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mb-3">
-                        {savedFilters.map((f) => (
-                          <span
-                            key={f.id}
-                            className="inline-flex items-center h-[34px] rounded-full border border-input bg-card text-[13px] font-semibold overflow-hidden"
-                          >
-                            <button className="pl-3 pr-2 h-full hover:bg-secondary" onClick={() => applySavedFilter(f)}>
-                              {f.name}
-                            </button>
-                            <button
-                              onClick={() => deleteSavedFilter(f.id)}
-                              className="pr-2.5 pl-1 h-full text-muted-foreground hover:text-destructive hover:bg-secondary"
-                              aria-label={`Delete ${f.name}`}
-                            >
-                              <Cross2Icon className="h-3.5 w-3.5" />
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    <Button variant="outline" size="sm" className="w-full" onClick={saveCurrentFilter}>
-                      <BookmarkIcon /> Save this combination
-                    </Button>
-                  </FilterGroup>
-
-                  <p className="text-[13px] text-muted-foreground">
-                    Language and licence class are set at the top of the page and apply everywhere.
-                  </p>
-                </div>
               )}
-            </div>
-
-            <div className="safe-bottom border-t border-border p-4 shrink-0">
-              <Button className="w-full" onClick={() => setFiltersOpen(false)}>
-                Show {total} question{total === 1 ? "" : "s"}
+              <Button variant="outline" size="sm" className="w-full" onClick={saveCurrentFilter}>
+                <BookmarkIcon /> Save this combination
               </Button>
-            </div>
+            </FilterGroup>
+
+            <p className="text-[13px] text-muted-foreground">
+              Language and licence class are set at the top of the page and apply everywhere.
+            </p>
           </div>
-        </div>
-      )}
+        )}
+      </FilterSheet>
 
       {total > 0 && (
         <div className="h-1.5 rounded-full bg-secondary mb-4 overflow-hidden" aria-hidden="true">
@@ -1184,16 +1156,6 @@ function PracticeInner() {
         </div>
       )}
     </main>
-  );
-}
-
-function FilterGroup({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">{label}</div>
-      {children}
-      {hint && <p className="text-[13px] text-muted-foreground mt-1.5">{hint}</p>}
-    </div>
   );
 }
 

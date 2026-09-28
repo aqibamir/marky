@@ -36,21 +36,32 @@ import {
   ReaderIcon,
 } from "@radix-ui/react-icons";
 import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
 import { Segmented } from "@/components/ui/segmented";
 import QuestionMedia from "@/components/QuestionMedia";
+import { FilterGroup, FilterSheet, FilterSummaryButton } from "@/components/FilterSheet";
 import {
   appliesToLicenseClass,
   chapterLabel,
+  getContentTags,
+  isNumericAnswerQuestion,
+  matchesExamPart,
+  questionMediaType,
+  TAG_INFO,
+  tagLabel,
   themeLabel,
   type DrivingQuestion,
+  type ExamPart,
   type Language,
   type LicenseClass,
+  type MediaType,
 } from "@/lib/drivingQuestions";
 import { CHAPTER_CONCEPTS } from "@/lib/chapterConcepts";
 import { APP_SETTINGS_EVENT, loadAppSettings } from "@/lib/appSettings";
 
 type Tab = "answers" | "concepts";
 type PointsFilter = "all" | "2" | "3" | "4" | "5";
+type MediaFilter = "all" | MediaType;
 
 // Catalog numbers look like "1.1", "1.1.01", "2.6.04" - compare them
 // segment-by-segment as numbers so chapters sort in the same order the
@@ -174,21 +185,6 @@ function QuestionAnswerCard({ q, showChapter }: { q: DrivingQuestion; showChapte
   );
 }
 
-function PointsFilterRow({ value, onChange }: { value: PointsFilter; onChange: (p: PointsFilter) => void }) {
-  return (
-    <Segmented
-      label="Points"
-      className="mb-5 print:hidden"
-      options={(["all", "2", "3", "4", "5"] as PointsFilter[]).map((p) => ({
-        value: p,
-        label: p === "all" ? "All points" : `${p} pts`,
-      }))}
-      value={value}
-      onChange={onChange}
-    />
-  );
-}
-
 function CheatSheetInner() {
   const searchParams = useSearchParams();
   const [lang, setLang] = useState<Language>("de");
@@ -197,6 +193,14 @@ function CheatSheetInner() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [keyword, setKeyword] = useState("");
   const [pointsFilter, setPointsFilter] = useState<PointsFilter>("all");
+  // Same filters as Practice (minus mode/order, which only make sense for
+  // a question queue), applied to both the Answer Key and Concepts tabs.
+  const [filterTheme, setFilterTheme] = useState<string>("all");
+  const [examPart, setExamPart] = useState<ExamPart>("all");
+  const [filterMedia, setFilterMedia] = useState<MediaFilter>("all");
+  const [numericOnly, setNumericOnly] = useState(false);
+  const [filterTags, setFilterTags] = useState<string[]>([]);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [tab, setTab] = useState<Tab>("answers");
   const [selectedChapter, setSelectedChapter] = useState<string | null>(null);
   const [conceptTocOpen, setConceptTocOpen] = useState(false);
@@ -270,13 +274,64 @@ function CheatSheetInner() {
     return licenseClass === "all" ? questions : questions.filter((q) => appliesToLicenseClass(q, licenseClass));
   }, [questions, licenseClass]);
 
-  // Answer Key pool: license-scoped + points filter (search is applied
-  // separately below, since matching search results are shown as their own
-  // flat view rather than nested inside the chapter picker).
+  const themes = useMemo(
+    () => Array.from(new Set(scoped.map((q) => q.theme_name))).sort((a, b) => themeLabel(a).localeCompare(themeLabel(b))),
+    [scoped]
+  );
+  const allTags = useMemo(
+    () => Object.keys(TAG_INFO).sort((a, b) => tagLabel(a).localeCompare(tagLabel(b))),
+    []
+  );
+
+  // Filtered pool shared by both tabs: license-scoped + the filter sheet
+  // (search is applied separately below, since matching search results are
+  // shown as their own flat view rather than nested inside the chapter
+  // picker; on Concepts it matches chapter text instead).
   const answerPool = useMemo(() => {
-    if (pointsFilter === "all") return scoped;
-    return scoped.filter((q) => q.pointsValue === Number(pointsFilter));
-  }, [scoped, pointsFilter]);
+    let list = scoped;
+    if (pointsFilter !== "all") list = list.filter((q) => q.pointsValue === Number(pointsFilter));
+    if (filterTheme !== "all") list = list.filter((q) => q.theme_name === filterTheme);
+    if (examPart !== "all") list = list.filter((q) => matchesExamPart(q, examPart));
+    if (filterMedia !== "all") list = list.filter((q) => questionMediaType(q) === filterMedia);
+    if (numericOnly) list = list.filter(isNumericAnswerQuestion);
+    if (filterTags.length > 0) list = list.filter((q) => getContentTags(q).some((t) => filterTags.includes(t)));
+    return list;
+  }, [scoped, pointsFilter, filterTheme, examPart, filterMedia, numericOnly, filterTags]);
+
+  const activeFilterCount =
+    (pointsFilter !== "all" ? 1 : 0) +
+    (filterTheme !== "all" ? 1 : 0) +
+    (examPart !== "all" ? 1 : 0) +
+    (filterMedia !== "all" ? 1 : 0) +
+    (numericOnly ? 1 : 0) +
+    (filterTags.length > 0 ? 1 : 0);
+
+  const filterSummary =
+    [
+      filterTheme === "all" ? "All categories" : themeLabel(filterTheme),
+      pointsFilter === "all" ? null : `${pointsFilter} Punkte`,
+      examPart === "all"
+        ? null
+        : examPart === "grundstoff"
+        ? "Basic knowledge"
+        : licenseClass === "B"
+        ? "Class B specific"
+        : "Class-specific",
+      filterMedia === "all" ? null : filterMedia === "none" ? "text only" : filterMedia,
+      numericOnly ? "numbers only" : null,
+      filterTags.length > 0 ? filterTags.map(tagLabel).join(" + ") : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+
+  function resetFilters() {
+    setPointsFilter("all");
+    setFilterTheme("all");
+    setExamPart("all");
+    setFilterMedia("all");
+    setNumericOnly(false);
+    setFilterTags([]);
+  }
 
   const answerGroups = useMemo(() => groupByThemeAndChapter(answerPool), [answerPool]);
   const totalAnswerQuestions = answerPool.length;
@@ -299,10 +354,16 @@ function CheatSheetInner() {
     return null;
   }, [answerGroups, selectedChapter]);
 
+  // A filter change can leave the open chapter with nothing in it - back
+  // out to the chapter picker instead of showing an empty chapter.
+  useEffect(() => {
+    if (selectedChapter && !selectedChapterData) setSelectedChapter(null);
+  }, [selectedChapter, selectedChapterData]);
+
   // --- Concepts tab: chapters that actually have a question in scope,
   // keyword matches the chapter's label/bullets rather than question text.
   const conceptGroups: ThemeGroup[] = useMemo(() => {
-    const themes = groupByThemeAndChapter(scoped);
+    const themes = groupByThemeAndChapter(answerPool);
     const kw = tab === "concepts" ? keyword.trim().toLowerCase() : "";
     const result: ThemeGroup[] = [];
     for (const t of themes) {
@@ -316,7 +377,7 @@ function CheatSheetInner() {
       if (chapters.length > 0) result.push({ ...t, chapters });
     }
     return result;
-  }, [scoped, keyword, tab]);
+  }, [answerPool, keyword, tab]);
 
   // A couple of chapters (e.g. "Geschwindigkeit", "Ueberholen") legitimately
   // appear under two different themes in the catalog - count distinct
@@ -437,6 +498,111 @@ function CheatSheetInner() {
         </div>
       )}
 
+      <FilterSummaryButton
+        summary={filterSummary}
+        activeCount={activeFilterCount}
+        onClick={() => setFiltersOpen(true)}
+        className="mb-3 print:hidden"
+      />
+
+      <FilterSheet
+        open={filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        onReset={activeFilterCount > 0 ? resetFilters : undefined}
+        resultLabel={
+          tab === "answers"
+            ? `Show ${totalAnswerQuestions} question${totalAnswerQuestions === 1 ? "" : "s"}`
+            : `Show ${distinctConceptChapters.size} chapter${distinctConceptChapters.size === 1 ? "" : "s"}`
+        }
+      >
+        <FilterGroup label="Category">
+          <div className="flex flex-wrap gap-2">
+            <Chip active={filterTheme === "all"} onClick={() => setFilterTheme("all")}>
+              All
+            </Chip>
+            {themes.map((t) => (
+              <Chip key={t} active={filterTheme === t} onClick={() => setFilterTheme(t)}>
+                {themeLabel(t)}
+              </Chip>
+            ))}
+          </div>
+        </FilterGroup>
+
+        <FilterGroup label="Points">
+          <Segmented
+            label="Points"
+            options={[
+              { value: "all" as PointsFilter, label: "Any" },
+              { value: "2" as PointsFilter, label: "2" },
+              { value: "3" as PointsFilter, label: "3" },
+              { value: "4" as PointsFilter, label: "4" },
+              { value: "5" as PointsFilter, label: "5" },
+            ]}
+            value={pointsFilter}
+            onChange={setPointsFilter}
+          />
+        </FilterGroup>
+
+        <FilterGroup label="Exam part">
+          <Segmented
+            label="Exam part"
+            options={(["all", "grundstoff", "zusatzstoff"] as ExamPart[]).map((p) => ({
+              value: p,
+              title:
+                p === "grundstoff"
+                  ? "Grundstoff - basic knowledge, asked in every license class"
+                  : p === "zusatzstoff"
+                  ? "Zusatzstoff - the class-specific half of the exam"
+                  : "Both parts",
+              label:
+                p === "all" ? "Both" : p === "grundstoff" ? "Basic" : licenseClass === "B" ? "Class B" : "Class-specific",
+            }))}
+            value={examPart}
+            onChange={setExamPart}
+          />
+        </FilterGroup>
+
+        <FilterGroup label="Media">
+          <div className="flex flex-wrap gap-2">
+            {([
+              ["all", "Any"],
+              ["video", "Video"],
+              ["image", "Picture"],
+              ["none", "Text only"],
+            ] as [MediaFilter, string][]).map(([value, label]) => (
+              <Chip key={value} active={filterMedia === value} onClick={() => setFilterMedia(value)}>
+                {label}
+              </Chip>
+            ))}
+            <Chip active={numericOnly} onClick={() => setNumericOnly(!numericOnly)}>
+              Numbers only
+            </Chip>
+          </div>
+        </FilterGroup>
+
+        <FilterGroup label={`Topics${filterTags.length > 0 ? ` · ${filterTags.length} selected` : ""}`}>
+          <div className="flex flex-wrap gap-2">
+            {allTags.map((t) => (
+              <Chip
+                key={t}
+                active={filterTags.includes(t)}
+                onClick={() =>
+                  setFilterTags((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]))
+                }
+              >
+                {tagLabel(t)}
+              </Chip>
+            ))}
+          </div>
+        </FilterGroup>
+
+        <p className="text-[13px] text-muted-foreground">
+          {tab === "answers"
+            ? "Search is in the box on the page. Language and licence class are set at the top and apply everywhere."
+            : "On Concepts, only chapters with at least one matching question are shown."}
+        </p>
+      </FilterSheet>
+
       {tab === "answers" && !selectedChapter && (
         <div className="relative mb-3 print:hidden">
           <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -449,7 +615,6 @@ function CheatSheetInner() {
           />
         </div>
       )}
-      {tab === "answers" && !searchActive && <PointsFilterRow value={pointsFilter} onChange={setPointsFilter} />}
 
       {/* ===================== ANSWER KEY TAB ===================== */}
       {tab === "answers" && searchActive && (
@@ -488,7 +653,7 @@ function CheatSheetInner() {
           </h2>
           {selectedChapterData.chapter.questions.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-12">
-              No questions in this chapter at the current points filter.
+              No questions in this chapter match the current filters.
             </p>
           ) : (
             <ol className="rounded-2xl border border-border bg-card overflow-hidden divide-y divide-border print:border-0 print:divide-y-0 print:space-y-3">
@@ -503,7 +668,12 @@ function CheatSheetInner() {
       {tab === "answers" && !searchActive && !selectedChapterData && (
         <>
           {answerGroups.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-12">No questions at this points filter.</p>
+            <div className="text-center py-12">
+              <p className="text-sm text-muted-foreground mb-3">No questions match these filters.</p>
+              <Button size="sm" variant="outline" onClick={resetFilters}>
+                Reset filters
+              </Button>
+            </div>
           ) : (
             answerGroups.map((t) => (
               <div key={t.themeName} className="mb-6">
@@ -607,7 +777,9 @@ function CheatSheetInner() {
           )}
 
           {conceptGroups.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-12">No chapters match &ldquo;{keyword}&rdquo;.</p>
+            <p className="text-sm text-muted-foreground text-center py-12">
+              {keyword.trim() ? <>No chapters match &ldquo;{keyword}&rdquo;.</> : "No chapters match these filters."}
+            </p>
           ) : (
             conceptGroups.map((t) => (
               <section key={t.themeName} id={`theme-${t.themeName}`} className="mb-8 print:break-before-page">
