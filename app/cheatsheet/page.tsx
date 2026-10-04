@@ -17,6 +17,9 @@
 //   chapter the rules and traps that answer its questions - each one able
 //   to show the real questions that prove it (see components/StudyGuide.tsx
 //   and scripts/verify-study-guide.mjs).
+// - "Numbers": every question whose answer is a number, grouped by topic,
+//   with the rules of thumb (stopping distance etc.) and a calculator for
+//   them (components/NumbersSheet.tsx, lib/numberFacts.ts).
 //
 // Data is fetched live from the same source as the rest of the app and
 // never persisted - consistent with not vendoring the copyrighted catalog
@@ -46,7 +49,11 @@ const StudyGuide = dynamic(() => import("@/components/StudyGuide"), {
   loading: () => <div className="h-64 rounded-2xl bg-secondary animate-pulse" />,
 });
 
-type Tab = "answers" | "guide";
+const NumbersSheet = dynamic(() => import("@/components/NumbersSheet"), {
+  loading: () => <div className="h-64 rounded-2xl bg-secondary animate-pulse" />,
+});
+
+type Tab = "answers" | "guide" | "numbers";
 type PointsFilter = "all" | "2" | "3" | "4" | "5";
 
 // Catalog numbers look like "1.1", "1.1.01", "2.6.04" - compare them
@@ -207,6 +214,7 @@ function CheatSheetInner() {
     const t = searchParams.get("tab");
     // "concepts" was the old name of this tab - keep old links working.
     if (t === "guide" || t === "concepts") setTab("guide");
+    if (t === "numbers") setTab("numbers");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -307,7 +315,7 @@ function CheatSheetInner() {
   }
 
   function handlePrint() {
-    if (tab === "guide" || selectedChapter || searchActive) {
+    if (tab !== "answers" || selectedChapter || searchActive) {
       window.print();
     } else {
       setPrintFull(true);
@@ -343,10 +351,15 @@ function CheatSheetInner() {
                 {licenseClass === "B" ? " · Class B" : " · all classes"} — pick a
                 chapter to see its correct answers.
               </>
-            ) : (
+            ) : tab === "guide" ? (
               <>
                 Answer patterns, terms explained, and the rules behind every
                 chapter{licenseClass === "B" ? " · Class B" : " · all classes"}.
+              </>
+            ) : (
+              <>
+                Every number you need - limits, distances, weights, formulas
+                {licenseClass === "B" ? " · Class B" : " · all classes"}.
               </>
             )}
           </p>
@@ -356,7 +369,7 @@ function CheatSheetInner() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 gap-1 bg-secondary rounded-full p-1 mb-3 print:hidden">
+      <div className="grid grid-cols-3 gap-1 bg-secondary rounded-full p-1 mb-3 print:hidden">
         <button
           onClick={() => setTab("answers")}
           className={`rounded-full py-1.5 text-sm font-medium transition-colors ${
@@ -372,6 +385,14 @@ function CheatSheetInner() {
           }`}
         >
           Study Guide
+        </button>
+        <button
+          onClick={() => setTab("numbers")}
+          className={`rounded-full py-1.5 text-sm font-medium transition-colors ${
+            tab === "numbers" ? "bg-primary text-primary-foreground glow-primary" : "hover:bg-background/60"
+          }`}
+        >
+          Numbers
         </button>
       </div>
 
@@ -389,6 +410,22 @@ function CheatSheetInner() {
                 class-appropriateness so far - switch to{" "}
                 <span className="font-medium">Class B</span> in the header
                 switcher for a verified set.
+              </>
+            )}
+          </p>
+        </div>
+      ) : tab === "numbers" ? (
+        <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 text-xs text-muted-foreground mb-4 print:hidden">
+          <p className="font-semibold text-primary mb-1">🔢 Learn the number, then the trap next to it</p>
+          <p>
+            The exam&rsquo;s wrong options are usually a nearby number (1 m instead of 1.5 m, 1 mm
+            instead of 1.6 mm, 80 instead of 50). Each fact below was checked against the real
+            answers, and the formulas were run against every calculation question.
+            {licenseClass !== "B" && (
+              <>
+                {" "}
+                The facts are written for <span className="font-medium">Class B</span>; the full list
+                below follows your current class setting.
               </>
             )}
           </p>
@@ -537,9 +574,10 @@ function CheatSheetInner() {
 
       {/* ===================== STUDY GUIDE TAB ===================== */}
       {tab === "guide" && <StudyGuide questions={scoped} lang={lang} />}
+      {tab === "numbers" && <NumbersSheet questions={scoped} lang={lang} />}
 
       <p className="text-xs text-muted-foreground text-center mt-8 print:hidden">
-        {tab === "answers" ? (
+        {tab !== "guide" ? (
           <>
             Sourced live from{" "}
             <a

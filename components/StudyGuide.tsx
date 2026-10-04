@@ -73,7 +73,7 @@ function Proof({ ev, byId }: { ev: string; byId: Map<string, DrivingQuestion> })
   );
 }
 
-function Point({ point, byId, tone }: { point: StudyPoint; byId: Map<string, DrivingQuestion>; tone: "rule" | "trap" }) {
+export function Point({ point, byId, tone }: { point: StudyPoint; byId: Map<string, DrivingQuestion>; tone: "rule" | "trap" }) {
   const [open, setOpen] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const available = point.evidence.filter((ev) => byId.has(parseEvidence(ev).id));
@@ -160,7 +160,7 @@ function TermName({ term, lang }: { term: { de: string; en: string }; lang: Lang
   );
 }
 
-function Section({ title, children, defaultOpen = false }: { title: string; children: ReactNode; defaultOpen?: boolean }) {
+export function Section({ title, children, defaultOpen = false }: { title: string; children: ReactNode; defaultOpen?: boolean }) {
   return (
     <details open={defaultOpen} data-study-section className="rounded-xl border border-border bg-card p-3 mb-3 print:border-0 print:p-0">
       <summary className="font-semibold cursor-pointer select-none">{title}</summary>

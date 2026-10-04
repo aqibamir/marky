@@ -1,4 +1,5 @@
-// Verifies every claim in lib/studyGuide.ts against the live catalog.
+// Verifies every claim in lib/studyGuide.ts and lib/numberFacts.ts against
+// the live catalog.
 //
 //   node scripts/verify-study-guide.mjs
 //
@@ -11,6 +12,10 @@
 // agree on every cited question's correct answers, so the guide holds in
 // both languages. Typed-number answers must match exactly. Exits non-zero
 // on any failure.
+//
+// For the numbers cheat sheet it additionally checks that every number
+// question in the Class B pool is cited by some topic, and that each formula
+// in FORMULA_CHECKS reproduces the catalog's answer.
 
 import fs from "fs";
 import os from "os";
@@ -22,7 +27,7 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "study-guide-"));
 
 // Transpile the app's TS modules so this script runs the real logic.
-for (const name of ["drivingQuestions", "catalogNames.generated", "classBExclusions", "questionTags.generated", "studyGuide"]) {
+for (const name of ["drivingQuestions", "catalogNames.generated", "classBExclusions", "questionTags.generated", "studyGuide", "numberFacts"]) {
   const src = fs.readFileSync(path.join(root, "lib", `${name}.ts`), "utf8");
   const js = ts
     .transpileModule(src, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } })
@@ -31,6 +36,7 @@ for (const name of ["drivingQuestions", "catalogNames.generated", "classBExclusi
 }
 const dq = await import(pathToFileURL(path.join(tmp, "drivingQuestions.mjs")).href);
 const { STUDY_GUIDE, parseEvidence } = await import(pathToFileURL(path.join(tmp, "studyGuide.mjs")).href);
+const { NUMBER_TOPICS, FORMULA_CHECKS, isNumberQuestion } = await import(pathToFileURL(path.join(tmp, "numberFacts.mjs")).href);
 
 const [de, en] = await Promise.all([dq.getAllQuestions("de"), dq.getAllQuestions("en")]);
 const byId = new Map();
@@ -59,28 +65,60 @@ function answers(entry, which) {
 let passed = 0;
 const failures = [];
 const cited = new Set();
-for (const ch of STUDY_GUIDE) {
-  if (!classBChapters.has(ch.chapter)) failures.push(`[${ch.chapter}] chapter has no Class B questions`);
-  for (const point of [...ch.rules, ...ch.traps]) {
-    if (point.evidence.length === 0) failures.push(`[${ch.chapter}] no evidence: ${point.text.slice(0, 60)}`);
-    for (const ev of point.evidence) {
-      const { id, kind, text } = parseEvidence(ev);
-      const entry = byId.get(id);
-      if (!entry) { failures.push(`[${ch.chapter}] ${ev}: no such question`); continue; }
-      if (!classB.has(id)) { failures.push(`[${ch.chapter}] ${ev}: not in the Class B pool`); continue; }
-      cited.add(id);
-      const key = (q) => q ? `${q.options.length}:${q.correct_answers.map((c) => c.letter).sort().join(",")}` : "missing";
-      if (key(entry.de) !== key(entry.en)) { failures.push(`[${ch.chapter}] ${ev}: German and English answers differ (${key(entry.de)} vs ${key(entry.en)})`); continue; }
-      if (kind === "exists") { passed++; continue; }
-      const pool = answers(entry, kind);
-      const needle = text.toLowerCase();
-      const freeEntry = entry.en.options.length === 0;
-      const ok = freeEntry ? pool.some((t) => t.trim() === needle.trim()) : pool.some((t) => t.includes(needle));
-      if (ok) passed++;
-      else failures.push(`[${ch.chapter}] ${ev}: "${text}" not in its ${kind.toUpperCase()} answers ${JSON.stringify(pool)}`);
-    }
+const key = (q) => (q ? `${q.options.length}:${q.correct_answers.map((c) => c.letter).sort().join(",")}` : "missing");
+
+function checkPoint(where, point, citedSet) {
+  if (point.evidence.length === 0) failures.push(`[${where}] no evidence: ${point.text.slice(0, 60)}`);
+  for (const ev of point.evidence) {
+    const { id, kind, text } = parseEvidence(ev);
+    const entry = byId.get(id);
+    if (!entry) { failures.push(`[${where}] ${ev}: no such question`); continue; }
+    if (!classB.has(id)) { failures.push(`[${where}] ${ev}: not in the Class B pool`); continue; }
+    citedSet.add(id);
+    if (key(entry.de) !== key(entry.en)) { failures.push(`[${where}] ${ev}: German and English answers differ (${key(entry.de)} vs ${key(entry.en)})`); continue; }
+    if (kind === "exists") { passed++; continue; }
+    const pool = answers(entry, kind);
+    const needle = text.toLowerCase();
+    const freeEntry = entry.en.options.length === 0;
+    const ok = freeEntry ? pool.some((t) => t.trim() === needle.trim()) : pool.some((t) => t.includes(needle));
+    if (ok) passed++;
+    else failures.push(`[${where}] ${ev}: "${text}" not in its ${kind.toUpperCase()} answers ${JSON.stringify(pool)}`);
   }
 }
+
+for (const ch of STUDY_GUIDE) {
+  if (!classBChapters.has(ch.chapter)) failures.push(`[${ch.chapter}] chapter has no Class B questions`);
+  for (const point of [...ch.rules, ...ch.traps]) checkPoint(ch.chapter, point, cited);
+}
+
+// --- Numbers cheat sheet ---
+const numberCited = new Set();
+for (const t of NUMBER_TOPICS) for (const point of [...t.facts, ...t.traps]) checkPoint(`numbers/${t.id}`, point, numberCited);
+// A number question in EITHER language (some spell the number out in one of them).
+const numberIds = new Set([...en, ...de].filter((q) => classB.has(q.question_id) && isNumberQuestion(q)).map((q) => q.question_id));
+const numberQuestions = en.filter((q) => numberIds.has(q.question_id));
+const notCovered = numberQuestions.filter((q) => !numberCited.has(q.question_id));
+for (const q of notCovered) failures.push(`[numbers] ${q.question_id} is a number question but no topic cites it: ${q.question_text.slice(0, 70)}`);
+
+const numbersIn = (t) => (t.match(/\d+(?:[.,]\d+)?/g) ?? []).map((n) => parseFloat(n.replace(",", ".")));
+let formulasOk = 0;
+for (const c of FORMULA_CHECKS) {
+  const q = byId.get(c.id)?.en;
+  if (!q) { failures.push(`[formula] ${c.id}: no such question`); continue; }
+  const correct = new Set(q.correct_answers.map((a) => a.letter));
+  const correctTexts = q.options.length === 0 ? q.correct_answers.map((a) => a.letter) : q.options.filter((o) => correct.has(o.letter)).map((o) => o.text);
+  let ok;
+  if (c.correctIf) {
+    ok = q.options.every((o) => c.correctIf(numbersIn(o.text)[0]) === correct.has(o.letter));
+  } else if (typeof c.expect === "number") {
+    ok = correctTexts.some((t) => numbersIn(t).some((n) => Math.abs(n - c.expect) < 1e-9));
+  } else {
+    ok = correctTexts.some((t) => t.toLowerCase().includes(String(c.expect).toLowerCase()));
+  }
+  if (ok) formulasOk++;
+  else failures.push(`[formula] ${c.id} (${c.what}): computed ${c.correctIf ? "a different set of options" : JSON.stringify(c.expect)}, catalog says ${JSON.stringify(correctTexts)}`);
+}
+
 const uncovered = [...classBChapters].filter((c) => !STUDY_GUIDE.some((g) => g.chapter === c));
 if (enClassB.length !== classB.size) failures.push(`English Class B pool has ${enClassB.length} questions, German ${classB.size}`);
 for (const g of STUDY_GUIDE) if (!enChapters.has(g.chapter)) failures.push(`[${g.chapter}] not found in English mode`);
@@ -92,6 +130,8 @@ for (const c of uncovered) console.log("✗ chapter missing from the guide:", c)
 console.log(
   `\n${passed} checks passed, ${failures.length} failed; ${STUDY_GUIDE.length}/${classBChapters.size} chapters ` +
     `(same ${enChapters.size} in English mode); ` +
-    `${cited.size} of ${classB.size} Class B questions cited as evidence (${Math.round((100 * cited.size) / classB.size)}%).`
+    `${cited.size} of ${classB.size} Class B questions cited as evidence (${Math.round((100 * cited.size) / classB.size)}%).\n` +
+    `Numbers sheet: ${numberQuestions.length - notCovered.length}/${numberQuestions.length} number questions covered, ` +
+    `${formulasOk}/${FORMULA_CHECKS.length} formula checks reproduce the catalog's answer.`
 );
 process.exit(failures.length || uncovered.length ? 1 : 0);
