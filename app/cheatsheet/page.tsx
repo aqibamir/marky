@@ -12,18 +12,19 @@
 //   "Expand all", and a table-of-contents link that scrolled to a chapter
 //   without actually opening it). Keeping the DOM to "one chapter's worth
 //   of questions" at a time fixes all three at once.
-// - "Concepts": the compressed rule of thumb for each chapter, with no
-//   question text at all - what you'd actually need to *understand* to get
-//   any question on that topic right, including ones reworded or using
-//   different numbers than anything in the Answer Key. Small enough (a
-//   few bullets x 65 chapters) that it doesn't need the same drill-down.
+// - "Study Guide": how to read the exam (answer patterns measured live on
+//   the questions in scope), a glossary of German exam terms, and per
+//   chapter the rules and traps that answer its questions - each one able
+//   to show the real questions that prove it (see components/StudyGuide.tsx
+//   and scripts/verify-study-guide.mjs).
 //
 // Data is fetched live from the same source as the rest of the app and
 // never persisted - consistent with not vendoring the copyrighted catalog
-// into the repo. The concept bullets are original writing, not extracted
-// from the catalog.
+// into the repo. The study guide is original writing that only cites
+// question IDs, not extracted catalog text.
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -38,10 +39,14 @@ import {
   type Language,
   type LicenseClass,
 } from "@/lib/drivingQuestions";
-import { CHAPTER_CONCEPTS } from "@/lib/chapterConcepts";
 import { APP_SETTINGS_EVENT, loadAppSettings } from "@/lib/appSettings";
 
-type Tab = "answers" | "concepts";
+// The guide's data module is large; only load it when the tab is opened.
+const StudyGuide = dynamic(() => import("@/components/StudyGuide"), {
+  loading: () => <div className="h-64 rounded-2xl bg-secondary animate-pulse" />,
+});
+
+type Tab = "answers" | "guide";
 type PointsFilter = "all" | "2" | "3" | "4" | "5";
 
 // Catalog numbers look like "1.1", "1.1.01", "2.6.04" - compare them
@@ -148,7 +153,7 @@ function QuestionAnswerCard({ q, showChapter }: { q: DrivingQuestion; showChapte
                 key={opt.letter}
                 className={isCorrect ? "font-bold text-success print:underline" : "text-muted-foreground"}
               >
-                {isCorrect ? "✓" : "·"} {opt.letter} {opt.text}
+                {isCorrect ? "✓" : "·"} {opt.text}
               </li>
             );
           })}
@@ -196,12 +201,12 @@ function CheatSheetInner() {
   const [pointsFilter, setPointsFilter] = useState<PointsFilter>("all");
   const [tab, setTab] = useState<Tab>("answers");
   const [selectedChapter, setSelectedChapter] = useState<string | null>(null);
-  const [conceptTocOpen, setConceptTocOpen] = useState(false);
   const [printFull, setPrintFull] = useState(false);
 
   useEffect(() => {
     const t = searchParams.get("tab");
-    if (t === "concepts") setTab("concepts");
+    // "concepts" was the old name of this tab - keep old links working.
+    if (t === "guide" || t === "concepts") setTab("guide");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -296,45 +301,13 @@ function CheatSheetInner() {
     return null;
   }, [answerGroups, selectedChapter]);
 
-  // --- Concepts tab: chapters that actually have a question in scope,
-  // keyword matches the chapter's label/bullets rather than question text.
-  const conceptGroups: ThemeGroup[] = useMemo(() => {
-    const themes = groupByThemeAndChapter(scoped);
-    const kw = tab === "concepts" ? keyword.trim().toLowerCase() : "";
-    const result: ThemeGroup[] = [];
-    for (const t of themes) {
-      const chapters = kw
-        ? t.chapters.filter((c) => {
-            const label = chapterLabel(c.chapterName).toLowerCase();
-            const bullets = CHAPTER_CONCEPTS[c.chapterName] ?? [];
-            return label.includes(kw) || bullets.some((b) => b.toLowerCase().includes(kw));
-          })
-        : t.chapters;
-      if (chapters.length > 0) result.push({ ...t, chapters });
-    }
-    return result;
-  }, [scoped, keyword, tab]);
-
-  // A couple of chapters (e.g. "Geschwindigkeit", "Ueberholen") legitimately
-  // appear under two different themes in the catalog - count distinct
-  // chapters for the headline number, not (theme, chapter) groups.
-  const distinctConceptChapters = useMemo(() => {
-    const names = new Set<string>();
-    for (const t of conceptGroups) for (const c of t.chapters) names.add(c.chapterName);
-    return names;
-  }, [conceptGroups]);
-  const totalConceptBullets = Array.from(distinctConceptChapters).reduce(
-    (n, name) => n + (CHAPTER_CONCEPTS[name]?.length ?? 0),
-    0
-  );
-
   function selectChapter(name: string) {
     setSelectedChapter(name);
     window.scrollTo(0, 0);
   }
 
   function handlePrint() {
-    if (tab === "concepts" || selectedChapter || searchActive) {
+    if (tab === "guide" || selectedChapter || searchActive) {
       window.print();
     } else {
       setPrintFull(true);
@@ -372,10 +345,8 @@ function CheatSheetInner() {
               </>
             ) : (
               <>
-                {distinctConceptChapters.size} chapter{distinctConceptChapters.size === 1 ? "" : "s"} ·{" "}
-                {totalConceptBullets} key facts
-                {licenseClass === "B" ? " · Class B" : " · all classes"} — no
-                questions, just the rule behind them.
+                Answer patterns, terms explained, and the rules behind every
+                chapter{licenseClass === "B" ? " · Class B" : " · all classes"}.
               </>
             )}
           </p>
@@ -395,24 +366,22 @@ function CheatSheetInner() {
           Answer Key
         </button>
         <button
-          onClick={() => setTab("concepts")}
+          onClick={() => setTab("guide")}
           className={`rounded-full py-1.5 text-sm font-medium transition-colors ${
-            tab === "concepts" ? "bg-primary text-primary-foreground glow-primary" : "hover:bg-background/60"
+            tab === "guide" ? "bg-primary text-primary-foreground glow-primary" : "hover:bg-background/60"
           }`}
         >
-          Concepts
+          Study Guide
         </button>
       </div>
 
       {tab === "answers" ? (
         <div className="rounded-xl border border-warning/30 bg-warning/10 p-3 text-xs text-muted-foreground mb-4 print:hidden">
-          <p className="font-semibold text-warning mb-1">⚠️ Memorize the answer, not the letter</p>
+          <p className="font-semibold text-warning mb-1">⚠️ Memorize the answer, not the position</p>
           <p>
-            On the real exam, options are shown in whatever order that particular
-            screen uses - the letters here (A/B/C) are just how this dataset
-            happens to list them, not a fixed position. Memorize which{" "}
-            <em>answer text</em> is correct, marked ✓ below, not &ldquo;always
-            pick B&rdquo;.
+            This dataset lists the correct answers first, so the top option is
+            almost always ✓ here - on the real exam the order is different.
+            Memorize which <em>answer text</em> is correct, never where it sits.
             {licenseClass === "all" && (
               <>
                 {" "}
@@ -426,14 +395,20 @@ function CheatSheetInner() {
         </div>
       ) : (
         <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 text-xs text-muted-foreground mb-4 print:hidden">
-          <p className="font-semibold text-primary mb-1">🎓 Understand these, don&rsquo;t just recite them</p>
+          <p className="font-semibold text-primary mb-1">🎓 Read it once, out loud</p>
           <p>
-            Each bullet is the rule of thumb behind an entire chapter, written to
-            hold up even when a question is reworded, uses different numbers, or
-            is one you&rsquo;ve never seen before - which the Answer Key alone
-            can&rsquo;t do. For a literal, word-for-word guarantee on a specific
-            question, pair this with the Answer Key tab; that one really is the
-            answer key.
+            Every rule and trap below was checked against the real answers - tap
+            &ldquo;Show proof&rdquo; to see the questions it comes from. It covers
+            the reasoning behind each chapter, so it also helps on reworded
+            questions; picture and video questions still depend on what the
+            image shows, so pair it with Practice.
+            {licenseClass !== "B" && (
+              <>
+                {" "}
+                The guide is written for <span className="font-medium">Class B</span> -
+                switch to it in the header for the matching question set.
+              </>
+            )}
           </p>
         </div>
       )}
@@ -560,83 +535,8 @@ function CheatSheetInner() {
         </div>
       )}
 
-      {/* ===================== CONCEPTS TAB ===================== */}
-      {tab === "concepts" && (
-        <>
-          <div className="flex flex-col sm:flex-row gap-2 mb-4 print:hidden">
-            <input
-              type="text"
-              placeholder="Search chapters / key facts..."
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              className="flex-1 border border-border rounded-lg p-2 bg-background text-sm"
-            />
-            <button
-              onClick={() => setConceptTocOpen((o) => !o)}
-              className="text-sm font-medium border border-primary/40 text-primary rounded-lg px-3 py-2 hover:bg-primary/10 whitespace-nowrap"
-            >
-              {conceptTocOpen ? "Hide" : "Show"} contents
-            </button>
-          </div>
-
-          {conceptTocOpen && (
-            <div className="rounded-xl border border-border bg-card p-3 mb-4 text-sm print:hidden">
-              <ul className="space-y-1">
-                {conceptGroups.map((t) => (
-                  <li key={t.themeName}>
-                    <a href={`#theme-${t.themeName}`} className="font-medium text-primary hover:underline">
-                      {themeEmoji(t.themeName)} {themeLabel(t.themeName)}
-                    </a>{" "}
-                    <span className="text-muted-foreground">({t.chapters.length})</span>
-                    <ul className="ml-4 mt-0.5 space-y-0.5">
-                      {t.chapters.map((c) => (
-                        <li key={c.chapterName}>
-                          <a
-                            href={`#ch-${c.chapterName}`}
-                            className="text-xs text-muted-foreground hover:text-primary hover:underline"
-                          >
-                            {chapterEmoji(c.chapterName)} {chapterLabel(c.chapterName)}
-                          </a>
-                        </li>
-                      ))}
-                    </ul>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {conceptGroups.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-12">No chapters match &ldquo;{keyword}&rdquo;.</p>
-          ) : (
-            conceptGroups.map((t) => (
-              <section key={t.themeName} id={`theme-${t.themeName}`} className="mb-8 print:break-before-page">
-                <h2 className="flex items-center gap-2 text-lg font-bold border-b-2 border-primary/40 pb-2 mb-4">
-                  <span>{themeEmoji(t.themeName)}</span>
-                  {themeLabel(t.themeName)}
-                  <span className="text-sm font-normal text-muted-foreground">({t.chapters.length})</span>
-                </h2>
-                {t.chapters.map((c) => (
-                  <div
-                    key={c.chapterName}
-                    id={`ch-${c.chapterName}`}
-                    className="mb-3 rounded-xl border border-border bg-card p-3 print:break-inside-avoid"
-                  >
-                    <h3 className="text-sm font-semibold mb-1.5">
-                      {chapterEmoji(c.chapterName)} {chapterLabel(c.chapterName)}
-                    </h3>
-                    <ul className="text-sm space-y-1 list-disc pl-4">
-                      {(CHAPTER_CONCEPTS[c.chapterName] ?? []).map((bullet, i) => (
-                        <li key={i}>{bullet}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </section>
-            ))
-          )}
-        </>
-      )}
+      {/* ===================== STUDY GUIDE TAB ===================== */}
+      {tab === "guide" && <StudyGuide questions={scoped} lang={lang} />}
 
       <p className="text-xs text-muted-foreground text-center mt-8 print:hidden">
         {tab === "answers" ? (
@@ -654,7 +554,7 @@ function CheatSheetInner() {
             your own personal study, not redistributed anywhere else.{" "}
           </>
         ) : (
-          "Original summaries, written for this app - not extracted from the catalog. "
+          "Original writing for this app, checked against the live catalog by scripts/verify-study-guide.mjs. "
         )}
         <Link href="/practice" className="underline">
           Back to Practice →

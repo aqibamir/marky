@@ -79,6 +79,16 @@ function seededShuffle<T>(items: T[], seed: number): T[] {
   return arr;
 }
 
+// The source dataset lists the correct answer(s) FIRST - option A is correct
+// in 100% of questions, B in about two thirds. Showing options in that order
+// would quietly train "pick A". Shuffle them per question (stable within a
+// visit, different between visits) and label by display position instead.
+function hashString(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  return h >>> 0;
+}
+
 function sortList(list: DrivingQuestion[], sortBy: SortBy, shuffleSeed: number) {
   switch (sortBy) {
     case "points-desc":
@@ -287,6 +297,7 @@ function PracticeInner() {
   // so every answer given can be recorded against it and reviewed later
   // from History → Runs.
   const [currentRunId, setCurrentRunId] = useState<string | null>(null);
+  const [optionSeed] = useState(() => Math.floor(Math.random() * 100000) + 1);
 
   // Apply ?points=/?theme=/?media=/?mode= from links (homepage tiles, insights) once.
   useEffect(() => {
@@ -471,6 +482,11 @@ function PracticeInner() {
   ]);
 
   const current = sessionQueue[index];
+  const displayOptions = useMemo(
+    () => (current ? seededShuffle(current.options, (hashString(current.question_id) % 100000) + optionSeed) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [current?.question_id, optionSeed]
+  );
 
   // Restore an answer only if you gave it earlier in THIS visit (so
   // Previous/Next shows what you just picked). A question you're seeing via
@@ -510,14 +526,11 @@ function PracticeInner() {
 
   function toggleOption(letter: string) {
     if (!current || checked) return;
-    const multi = current.correct_answers.length > 1;
-    if (multi) {
-      setSelected((prev) =>
-        prev.includes(letter) ? prev.filter((l) => l !== letter) : [...prev, letter]
-      );
-    } else {
-      setSelected([letter]);
-    }
+    // Always multi-select, like the real exam: switching to radio buttons for
+    // single-answer questions would tell you how many answers are correct.
+    setSelected((prev) =>
+      prev.includes(letter) ? prev.filter((l) => l !== letter) : [...prev, letter]
+    );
   }
 
   function checkAnswer() {
@@ -1019,7 +1032,8 @@ function PracticeInner() {
             </div>
           ) : (
           <div className="space-y-2 mb-4">
-            {current.options.map((opt) => {
+            <p className="text-xs text-muted-foreground">Tick every correct answer - one or more.</p>
+            {displayOptions.map((opt, i) => {
               const isSelected = selected.includes(opt.letter);
               const isCorrectOpt = current.correct_answers.some(
                 (c) => c.letter === opt.letter
@@ -1037,14 +1051,14 @@ function PracticeInner() {
                   className={`flex items-start gap-2 border-2 rounded-xl p-3 cursor-pointer transition-colors ${style}`}
                 >
                   <input
-                    type={current.correct_answers.length > 1 ? "checkbox" : "radio"}
+                    type="checkbox"
                     checked={isSelected}
                     onChange={() => toggleOption(opt.letter)}
                     disabled={checked}
                     className="mt-1"
                   />
                   <span>
-                    {opt.letter} {opt.text}
+                    <span className="text-muted-foreground">{String.fromCharCode(65 + i)}.</span> {opt.text}
                   </span>
                 </label>
               );
@@ -1072,13 +1086,9 @@ function PracticeInner() {
                     <p className="text-sm font-medium text-warning">
                       ⚠️ You&rsquo;ve missed this {priorHistory.wrongCount + 1}× now
                       {priorHistory.lastWrongSelected?.length
-                        ? ` — last time: ${priorHistory.lastWrongSelected
-                            .map(
-                              (l) =>
-                                current.options.find((o) => o.letter === l)?.letter ??
-                                l
-                            )
-                            .join(", ")}`
+                        ? ` — last time you picked: ${priorHistory.lastWrongSelected
+                            .map((l) => current.options.find((o) => o.letter === l)?.text ?? l)
+                            .join(" / ")}`
                         : ""}
                       .
                     </p>
