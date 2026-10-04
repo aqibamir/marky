@@ -5,6 +5,7 @@
 // proof), and the complete list of number questions with their answers,
 // fetched live.
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { DrivingQuestion, Language } from "@/lib/drivingQuestions";
 import { parseEvidence } from "@/lib/studyGuide";
@@ -144,6 +145,16 @@ export default function NumbersSheet({ questions, lang }: { questions: DrivingQu
 
   return (
     <div>
+      <Link
+        href="/numbers-test"
+        className="flex items-center justify-between gap-3 rounded-xl border-2 border-primary bg-primary/10 p-3 mb-3 hover:bg-primary/15 transition-colors print:hidden"
+      >
+        <span>
+          <span className="font-semibold">✍️ Test yourself</span>
+          <span className="block text-xs text-muted-foreground">Every type-the-number question, scored, with your mistakes explained.</span>
+        </span>
+        <span className="text-primary font-semibold shrink-0">Start →</span>
+      </Link>
       <Calculator lang={lang} />
 
       {NUMBER_TOPICS.map((t) => (

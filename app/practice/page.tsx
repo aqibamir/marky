@@ -37,6 +37,7 @@ import {
   type StatsMap,
 } from "@/lib/practiceStats";
 import { appendRunAnswer, startRun } from "@/lib/practiceRuns";
+import { sameAnswer } from "@/lib/answers";
 import { getTheoryNotesForTags } from "@/lib/theoryNotes";
 import { APP_SETTINGS_EVENT, loadAppSettings } from "@/lib/appSettings";
 
@@ -46,22 +47,6 @@ type MediaFilter = "all" | MediaType;
 // "selected" isn't user-toggled in the filter panel - it's how the History
 // page hands off a specific set of questions to redo.
 type Mode = "new" | "due" | "weak" | "all" | "selected";
-
-// Typed answers should match regardless of decimal separator or padding:
-// the catalog stores "1,5" but "1.5" (or " 1,50 ") is the same answer.
-function normalizeAnswer(value: string): string {
-  const trimmed = value.trim();
-  if (!/^[+-]?[\d.,\s]+$/.test(trimmed)) return trimmed;
-  const n = parseFloat(trimmed.replace(/\s/g, "").replace(",", "."));
-  return Number.isFinite(n) ? String(n) : trimmed;
-}
-
-function sameAnswer(a: string[], b: string[]) {
-  if (a.length !== b.length) return false;
-  const sortedA = a.map(normalizeAnswer).sort();
-  const sortedB = b.map(normalizeAnswer).sort();
-  return sortedA.every((v, i) => v === sortedB[i]);
-}
 
 // Small seeded shuffle so a "random" sort stays stable across re-renders and
 // only reshuffles when the user asks it to (via shuffleSeed).

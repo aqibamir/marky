@@ -36,7 +36,7 @@ for (const name of ["drivingQuestions", "catalogNames.generated", "classBExclusi
 }
 const dq = await import(pathToFileURL(path.join(tmp, "drivingQuestions.mjs")).href);
 const { STUDY_GUIDE, parseEvidence } = await import(pathToFileURL(path.join(tmp, "studyGuide.mjs")).href);
-const { NUMBER_TOPICS, FORMULA_CHECKS, isNumberQuestion } = await import(pathToFileURL(path.join(tmp, "numberFacts.mjs")).href);
+const { NUMBER_TOPICS, FORMULA_CHECKS, isNumberQuestion, TYPED_ANSWER_UNITS, factsFor } = await import(pathToFileURL(path.join(tmp, "numberFacts.mjs")).href);
 
 const [de, en] = await Promise.all([dq.getAllQuestions("de"), dq.getAllQuestions("en")]);
 const byId = new Map();
@@ -100,6 +100,15 @@ const numberQuestions = en.filter((q) => numberIds.has(q.question_id));
 const notCovered = numberQuestions.filter((q) => !numberCited.has(q.question_id));
 for (const q of notCovered) failures.push(`[numbers] ${q.question_id} is a number question but no topic cites it: ${q.question_text.slice(0, 70)}`);
 
+// Type-in test: a unit for every Class B type-in question (and nothing else),
+// and at least one explaining fact for each.
+const typedIds = new Set(en.filter((q) => classB.has(q.question_id) && q.options.length === 0).map((q) => q.question_id));
+for (const id of typedIds) {
+  if (!(id in TYPED_ANSWER_UNITS)) failures.push(`[units] ${id} is a type-in question without a unit entry`);
+  if (factsFor(id).length === 0) failures.push(`[test] ${id} has no explaining fact`);
+}
+for (const id of Object.keys(TYPED_ANSWER_UNITS)) if (!typedIds.has(id)) failures.push(`[units] ${id} is not a Class B type-in question`);
+
 const numbersIn = (t) => (t.match(/\d+(?:[.,]\d+)?/g) ?? []).map((n) => parseFloat(n.replace(",", ".")));
 let formulasOk = 0;
 for (const c of FORMULA_CHECKS) {
@@ -132,6 +141,7 @@ console.log(
     `(same ${enChapters.size} in English mode); ` +
     `${cited.size} of ${classB.size} Class B questions cited as evidence (${Math.round((100 * cited.size) / classB.size)}%).\n` +
     `Numbers sheet: ${numberQuestions.length - notCovered.length}/${numberQuestions.length} number questions covered, ` +
-    `${formulasOk}/${FORMULA_CHECKS.length} formula checks reproduce the catalog's answer.`
+    `${formulasOk}/${FORMULA_CHECKS.length} formula checks reproduce the catalog's answer; ` +
+    `${typedIds.size} type-in questions, each with a unit and an explanation.`
 );
 process.exit(failures.length || uncovered.length ? 1 : 0);

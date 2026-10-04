@@ -341,3 +341,71 @@ export const NUMBER_TOPICS: NumberTopic[] = [
     traps: [],
   },
 ];
+
+// --- Type-in test -----------------------------------------------------------
+
+/**
+ * The unit shown next to the answer box, as on the real exam ("___ m"). The
+ * catalog doesn't carry units, so these are set by hand for every Class B
+ * type-in question ("" = no unit: a phone number, a count, a line number).
+ * The verifier checks this list covers exactly the Class B type-in questions.
+ */
+export const TYPED_ANSWER_UNITS: Record<string, string> = {
+  "1.2.02-111": "km/h",
+  "1.2.03-101": "km/h",
+  "1.2.03-102": "times",
+  "1.2.05-003": "m",
+  "1.2.05-004": "m",
+  "1.2.05-005": "m",
+  "1.2.12-108": "m",
+  "1.2.12-109": "m",
+  "1.2.12-110": "m",
+  "1.2.12-111": "m",
+  "1.2.12-112": "m",
+  "1.2.12-113": "minutes",
+  "1.2.12-129": "m",
+  "1.2.12-130": "m",
+  "1.2.12-131": "m",
+  "1.2.12-133": "m",
+  "1.2.22-101": "m",
+  "1.2.34-011": "",
+  "1.4.41-171": "km/h",
+  "2.1.08-025": "",
+  "2.2.03-006": "m",
+  "2.2.03-007": "m",
+  "2.2.03-008": "m",
+  "2.2.03-009": "m",
+  "2.2.03-010": "m",
+  "2.2.03-011": "m",
+  "2.2.03-012": "m",
+  "2.2.03-018": "km/h",
+  "2.2.03-025": "km/h",
+  "2.2.03-026-M": "km/h",
+  "2.2.03-101": "km/h",
+  "2.2.03-104": "km/h",
+  "2.2.03-109": "km/h",
+  "2.2.03-110": "km/h",
+  "2.2.04-004": "m",
+  "2.2.04-102": "m",
+  "2.2.04-107": "m",
+  "2.2.07-002": "t",
+  "2.2.12-102": "t",
+  "2.2.12-104": "m",
+  "2.2.12-204": "m",
+  "2.2.18-010": "km/h",
+  "2.2.22-111": "m",
+  "2.2.22-129": "m",
+  "2.6.01-108": "months",
+  "2.6.03-116": "",
+  "2.7.02-032": "mm",
+  "2.7.05-108": "mm",
+};
+
+/** The sheet's facts that explain a question (those citing it). */
+export function factsFor(questionId: string): StudyPoint[] {
+  const out: StudyPoint[] = [];
+  for (const t of NUMBER_TOPICS)
+    for (const p of t.facts)
+      if (p.evidence.some((ev) => ev.split(/[=~]/)[0] === questionId)) out.push(p);
+  return out;
+}

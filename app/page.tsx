@@ -50,6 +50,9 @@ export default async function Home() {
             <Button asChild size="lg" variant="outline">
               <Link href="/cheatsheet">Browse all questions</Link>
             </Button>
+            <Button asChild size="lg" variant="outline">
+              <Link href="/numbers-test">🔢 Type-in test</Link>
+            </Button>
           </div>
 
           <DueReviewBanner />
