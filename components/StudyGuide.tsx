@@ -117,7 +117,7 @@ function MarkerRow({ stat, red }: { stat: MarkerStat; red: boolean }) {
   return (
     <li className="py-1.5 border-b border-border last:border-0">
       <div className="flex items-center justify-between gap-2 text-sm">
-        <span className="min-w-0">{stat.marker.label}</span>
+        <span className="min-w-0">{stat.label}</span>
         <span className={`shrink-0 text-xs font-semibold ${weak ? "text-muted-foreground" : red ? "text-destructive" : "text-success"}`}>
           {reliability}% {red ? "wrong" : "correct"} · {stat.options}
           {weak && " (weak hint)"}
@@ -147,6 +147,16 @@ function MarkerRow({ stat, red }: { stat: MarkerStat; red: boolean }) {
         </ul>
       )}
     </li>
+  );
+}
+
+/** The term in the exam's language first, the other language alongside. */
+function TermName({ term, lang }: { term: { de: string; en: string }; lang: Language }) {
+  const [main, other] = lang === "en" ? [term.en, term.de] : [term.de, term.en];
+  return (
+    <>
+      {main} <span className="font-normal text-muted-foreground">- {other}</span>
+    </>
   );
 }
 
@@ -205,7 +215,7 @@ function ChapterBody({ guide, questions, byId, lang }: { guide: StudyChapter; qu
             {guide.terms.map((t) => (
               <div key={t.de} className="rounded-xl border border-border bg-card p-3 text-sm print:break-inside-avoid">
                 <dt className="font-semibold">
-                  {t.de} <span className="font-normal text-muted-foreground">- {t.en}</span>
+                  <TermName term={t} lang={lang} />
                 </dt>
                 <dd className="text-muted-foreground mt-0.5">{t.explain}</dd>
               </div>
@@ -283,8 +293,9 @@ export default function StudyGuide({ questions, lang }: { questions: DrivingQues
       if (!chapterQuestions.has(g.chapter)) continue;
       for (const t of g.terms) if (!seen.has(t.de)) seen.set(t.de, { ...t, chapter: g.chapter });
     }
-    return Array.from(seen.values()).sort((a, b) => a.de.localeCompare(b.de, "de"));
-  }, [chapterQuestions]);
+    const key = (t: { de: string; en: string }) => (lang === "en" ? t.en : t.de).replace(/^[^\p{L}\d]+/u, "");
+    return Array.from(seen.values()).sort((a, b) => key(a).localeCompare(key(b), lang));
+  }, [chapterQuestions, lang]);
 
   const kw = keyword.trim().toLowerCase();
   const matches = (g: StudyChapter) =>
@@ -330,7 +341,8 @@ export default function StudyGuide({ questions, lang }: { questions: DrivingQues
           on the real exam, learn the <em>content</em>, never the position.
         </p>
         <p>
-          <strong>Words that tip you off</strong> (measured on these questions - percentages are live):
+          <strong>Words that tip you off</strong> in the {lang === "en" ? "English" : "German"} wording (measured on these
+          questions - percentages are live; switch DE/EN in the header to see the other language&rsquo;s list):
         </p>
         <div className="grid sm:grid-cols-2 gap-3">
           <div>
@@ -384,7 +396,7 @@ export default function StudyGuide({ questions, lang }: { questions: DrivingQues
           {glossary.map((t) => (
             <div key={t.de} className="print:break-inside-avoid">
               <dt className="font-semibold">
-                {t.de} <span className="font-normal text-muted-foreground">- {t.en}</span>
+                <TermName term={t} lang={lang} />
               </dt>
               <dd className="text-muted-foreground">{t.explain}</dd>
             </div>

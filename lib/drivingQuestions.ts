@@ -6,6 +6,7 @@
 // hotlinked to their original hosts) rather than duplicating the full
 // catalog as committed files here.
 
+import { CHAPTER_NAME_BY_CODE, THEME_NAME_BY_CODE } from "./catalogNames.generated";
 import { CLASS_B_EXCLUDED_QUESTION_IDS } from "./classBExclusions";
 
 export interface QuestionOption {
@@ -63,8 +64,22 @@ export async function getAllQuestions(lang: Language = "de"): Promise<DrivingQue
 
   return raw.map((q) => ({
     ...q,
+    ...canonicalNames(q),
     pointsValue: parsePoints(q.points),
   }));
+}
+
+// The English catalog names the same chapter inconsistently ("Behavior" /
+// "Behaviour", one name for two German chapters), but labels, filters and the
+// study guide are all keyed by the German names - so file every question
+// under the German name for its chapter/theme number, whatever the language.
+function canonicalNames(q: RawDrivingQuestion): Pick<RawDrivingQuestion, "chapter_name" | "theme_name"> {
+  const chapter = q.chapter_number.match(/\d+\.\d+\.\d+/)?.[0];
+  const theme = q.theme_number.match(/\d+\.\d+/)?.[0];
+  return {
+    chapter_name: (chapter && CHAPTER_NAME_BY_CODE[chapter]) || q.chapter_name,
+    theme_name: (theme && THEME_NAME_BY_CODE[theme]) || q.theme_name,
+  };
 }
 
 export function sortByPoints(

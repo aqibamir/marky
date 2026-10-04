@@ -6,8 +6,11 @@
 // header of lib/studyGuide.ts). This checks that every cited question exists,
 // is in the Class B pool (using the app's own appliesToLicenseClass, not a
 // copy of it), and that the quoted text really appears in that question's
-// correct (=) or wrong (~) answers in German or English. Typed-number answers
-// must match exactly. Exits non-zero on any failure.
+// correct (=) or wrong (~) answers in the English catalog (the guide quotes
+// English wording). It also checks that the German and English catalogs
+// agree on every cited question's correct answers, so the guide holds in
+// both languages. Typed-number answers must match exactly. Exits non-zero
+// on any failure.
 
 import fs from "fs";
 import os from "os";
@@ -19,7 +22,7 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "study-guide-"));
 
 // Transpile the app's TS modules so this script runs the real logic.
-for (const name of ["drivingQuestions", "classBExclusions", "questionTags.generated", "studyGuide"]) {
+for (const name of ["drivingQuestions", "catalogNames.generated", "classBExclusions", "questionTags.generated", "studyGuide"]) {
   const src = fs.readFileSync(path.join(root, "lib", `${name}.ts`), "utf8");
   const js = ts
     .transpileModule(src, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } })
@@ -35,10 +38,13 @@ for (const q of de) byId.set(q.question_id, { de: q });
 for (const q of en) (byId.get(q.question_id) ?? byId.set(q.question_id, {}).get(q.question_id)).en = q;
 const classB = new Set(de.filter((q) => dq.appliesToLicenseClass(q, "B")).map((q) => q.question_id));
 const classBChapters = new Set(de.filter((q) => classB.has(q.question_id)).map((q) => q.chapter_name));
+// The guide is keyed by chapter name, so English mode must produce the same names.
+const enClassB = en.filter((q) => dq.appliesToLicenseClass(q, "B"));
+const enChapters = new Set(enClassB.map((q) => q.chapter_name));
 
 function answers(entry, which) {
   const out = [];
-  for (const q of [entry.de, entry.en]) {
+  for (const q of [entry.en]) {
     if (!q) continue;
     const correct = new Set(q.correct_answers.map((c) => c.letter));
     if (q.options.length === 0) {
@@ -63,10 +69,12 @@ for (const ch of STUDY_GUIDE) {
       if (!entry) { failures.push(`[${ch.chapter}] ${ev}: no such question`); continue; }
       if (!classB.has(id)) { failures.push(`[${ch.chapter}] ${ev}: not in the Class B pool`); continue; }
       cited.add(id);
+      const key = (q) => q ? `${q.options.length}:${q.correct_answers.map((c) => c.letter).sort().join(",")}` : "missing";
+      if (key(entry.de) !== key(entry.en)) { failures.push(`[${ch.chapter}] ${ev}: German and English answers differ (${key(entry.de)} vs ${key(entry.en)})`); continue; }
       if (kind === "exists") { passed++; continue; }
       const pool = answers(entry, kind);
       const needle = text.toLowerCase();
-      const freeEntry = (entry.de ?? entry.en).options.length === 0;
+      const freeEntry = entry.en.options.length === 0;
       const ok = freeEntry ? pool.some((t) => t.trim() === needle.trim()) : pool.some((t) => t.includes(needle));
       if (ok) passed++;
       else failures.push(`[${ch.chapter}] ${ev}: "${text}" not in its ${kind.toUpperCase()} answers ${JSON.stringify(pool)}`);
@@ -74,12 +82,16 @@ for (const ch of STUDY_GUIDE) {
   }
 }
 const uncovered = [...classBChapters].filter((c) => !STUDY_GUIDE.some((g) => g.chapter === c));
+if (enClassB.length !== classB.size) failures.push(`English Class B pool has ${enClassB.length} questions, German ${classB.size}`);
+for (const g of STUDY_GUIDE) if (!enChapters.has(g.chapter)) failures.push(`[${g.chapter}] not found in English mode`);
+for (const c of enChapters) if (!classBChapters.has(c)) failures.push(`English chapter "${c}" has no German counterpart`);
 
 fs.rmSync(tmp, { recursive: true, force: true });
 for (const f of failures) console.log("✗", f);
 for (const c of uncovered) console.log("✗ chapter missing from the guide:", c);
 console.log(
-  `\n${passed} checks passed, ${failures.length} failed; ${STUDY_GUIDE.length}/${classBChapters.size} chapters; ` +
+  `\n${passed} checks passed, ${failures.length} failed; ${STUDY_GUIDE.length}/${classBChapters.size} chapters ` +
+    `(same ${enChapters.size} in English mode); ` +
     `${cited.size} of ${classB.size} Class B questions cited as evidence (${Math.round((100 * cited.size) / classB.size)}%).`
 );
 process.exit(failures.length || uncovered.length ? 1 : 0);

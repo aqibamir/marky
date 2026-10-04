@@ -8,28 +8,36 @@ import type { DrivingQuestion, Language } from "./drivingQuestions";
 
 export interface Marker {
   id: string;
-  label: string; // shown to the user, in the active language
-  re: Record<Language, RegExp>;
+  label: Record<Language, string>;
+  // A language can leave a marker out when the word doesn't carry the same
+  // signal there (e.g. English "may" is mostly permission - "you may pass" -
+  // and only 64% correct, while German "kann" is 82%).
+  re: Partial<Record<Language, RegExp>>;
 }
 
 // "Green" markers: hedged, cautious wording - usually a correct option.
+// Each regex was tuned on that language's own wording of the catalog.
 export const GREEN_MARKERS: Marker[] = [
-  { id: "can", label: "kann / können / könnte · can / could / may", re: { de: /\b(kann|können|könnte|könnten)\b/i, en: /\b(can|could|may|might)\b/i } },
-  { id: "possible", label: "möglich · possible", re: { de: /möglich/i, en: /possib/i } },
-  { id: "readyBrake", label: "bremsbereit · ready to brake", re: { de: /bremsbereit/i, en: /ready to brake|prepared to brake/i } },
-  { id: "reduceSpeed", label: "Geschwindigkeit verringern · reduce speed", re: { de: /(geschwindigkeit|tempo).{0,30}(verringer|reduzier|vermindern|herabsetz)|(verringer|reduzier|vermindern|herabsetz).{0,30}(geschwindigkeit|tempo)/i, en: /reduce (my |the |your )?speed|slow down|lower (my )?speed/i } },
-  { id: "expect", label: "rechnen mit · expect / anticipate", re: { de: /rechne/i, en: /expect|anticipat/i } },
+  { id: "can", label: { de: "kann / können / könnte", en: "could / might" }, re: { de: /\b(kann|können|könnte|könnten)\b/i, en: /\b(could|might)\b/i } },
+  { id: "possible", label: { de: "möglich", en: "possible / possibly" }, re: { de: /möglich/i, en: /possib/i } },
+  { id: "ifNecessary", label: { de: "gegebenenfalls / notfalls", en: "if necessary" }, re: { de: /gegebenenfalls|notfalls|falls (nötig|erforderlich)|wenn (nötig|erforderlich)|erforderlichenfalls|ggf\./i, en: /if necessary|where necessary|if need be/i } },
+  { id: "readyBrake", label: { de: "bremsbereit", en: "ready to brake" }, re: { de: /bremsbereit/i, en: /ready to brake|prepared to brake/i } },
+  { id: "reduceSpeed", label: { de: "Geschwindigkeit verringern", en: "reduce speed / slow down" }, re: { de: /(geschwindigkeit|tempo).{0,30}(verringer|reduzier|vermindern|herabsetz)|(verringer|reduzier|vermindern|herabsetz).{0,30}(geschwindigkeit|tempo)/i, en: /reduce (my |the |your )?speed|slow down|lower (my )?speed/i } },
+  { id: "expect", label: { de: "rechnen mit", en: "expect / anticipate" }, re: { de: /rechne/i, en: /expect|anticipat/i } },
+  { id: "check", label: { de: "prüfen / kontrollieren", en: "check" }, re: { de: /prüfen|überprüf|kontrollier/i, en: /\bcheck/i } },
 ];
 
 // "Red" markers: absolute or aggressive wording - usually a wrong option.
 export const RED_MARKERS: Marker[] = [
-  { id: "always", label: "immer · always", re: { de: /\bimmer\b/i, en: /\balways\b/i } },
-  { id: "never", label: "nie / niemals / stets · never", re: { de: /\bnie(mals)?\b|\bstets\b/i, en: /\bnever\b/i } },
-  { id: "horn", label: "hupen / Schallzeichen · horn", re: { de: /hupe|schallzeichen/i, en: /\bhorn\b|honk/i } },
-  { id: "flash", label: "Lichthupe · flash headlights", re: { de: /lichthupe/i, en: /flash (my |your )?(head)?lights/i } },
-  { id: "brisk", label: "zügig · briskly / quickly", re: { de: /zügig/i, en: /\bquickly\b|\bbriskly\b/i } },
-  { id: "carryOn", label: "weiterfahren · continue driving (as before)", re: { de: /weiterfahr|fahre weiter|wie bisher/i, en: /continue (driving|my journey)|drive on\b|as before/i } },
-  { id: "only", label: "nur · only", re: { de: /\bnur\b/i, en: /\bonly\b/i } },
+  { id: "always", label: { de: "immer", en: "always" }, re: { de: /\bimmer\b/i, en: /\balways\b/i } },
+  { id: "never", label: { de: "nie / niemals / stets", en: "never" }, re: { de: /\bnie(mals)?\b|\bstets\b/i, en: /\bnever\b/i } },
+  { id: "accelerate", label: { de: "ich beschleunige / Gas geben", en: "I accelerate" }, re: { de: /\bich beschleunig|\bbeschleunige ich|gebe gas|gas geben/i, en: /\bi (will |must |should )?accelerat/i } },
+  { id: "faster", label: { de: "schneller fahren", en: "drive faster / speed up" }, re: { de: /schneller fahren|fahre schneller|geschwindigkeit erhöhen|erhöhe.{0,20}geschwindigkeit/i, en: /drive faster|speed up|increase (my )?speed/i } },
+  { id: "horn", label: { de: "hupen / Schallzeichen", en: "horn" }, re: { de: /hupe|schallzeichen/i, en: /\bhorn\b|honk/i } },
+  { id: "flash", label: { de: "Lichthupe", en: "flash headlights" }, re: { de: /lichthupe/i, en: /flash (my |your )?(head)?lights/i } },
+  { id: "brisk", label: { de: "zügig", en: "quickly / briskly" }, re: { de: /zügig/i, en: /\bquickly\b|\bbriskly\b/i } },
+  { id: "carryOn", label: { de: "weiterfahren / wie bisher", en: "continue driving / as before" }, re: { de: /weiterfahr|fahre weiter|wie bisher/i, en: /continue (driving|my journey)|drive on\b|as before/i } },
+  { id: "only", label: { de: "nur", en: "only" }, re: { de: /\bnur\b/i, en: /\bonly\b/i } },
 ];
 
 export interface OptionHit {
@@ -40,6 +48,7 @@ export interface OptionHit {
 
 export interface MarkerStat {
   marker: Marker;
+  label: string; // the marker's label in the language it was measured in
   options: number;
   correct: number;
   /** Options where this marker points the wrong way (correct red / wrong green). */
@@ -57,12 +66,12 @@ export interface PatternSummary {
   red: MarkerStat[];
 }
 
-function statFor(marker: Marker, questions: DrivingQuestion[], lang: Language, red: boolean): MarkerStat {
-  const stat: MarkerStat = { marker, options: 0, correct: 0, exceptions: [] };
+function statFor(marker: Marker, re: RegExp, questions: DrivingQuestion[], lang: Language, red: boolean): MarkerStat {
+  const stat: MarkerStat = { marker, label: marker.label[lang], options: 0, correct: 0, exceptions: [] };
   for (const q of questions) {
     const correctLetters = new Set(q.correct_answers.map((c) => c.letter));
     for (const o of q.options) {
-      if (!marker.re[lang].test(o.text)) continue;
+      if (!re.test(o.text)) continue;
       const correct = correctLetters.has(o.letter);
       stat.options++;
       if (correct) stat.correct++;
@@ -71,6 +80,17 @@ function statFor(marker: Marker, questions: DrivingQuestion[], lang: Language, r
   }
   return stat;
 }
+
+function statsFor(markers: Marker[], questions: DrivingQuestion[], lang: Language, red: boolean): MarkerStat[] {
+  const out: MarkerStat[] = [];
+  for (const m of markers) {
+    const re = m.re[lang];
+    if (re) out.push(statFor(m, re, questions, lang, red));
+  }
+  return out;
+}
+
+const matches = (markers: Marker[], text: string, lang: Language) => markers.some((m) => m.re[lang]?.test(text) ?? false);
 
 export function summarizePatterns(questions: DrivingQuestion[], lang: Language): PatternSummary {
   const mc = questions.filter((q) => q.options.length > 0);
@@ -87,8 +107,8 @@ export function summarizePatterns(questions: DrivingQuestion[], lang: Language):
     allCorrect: mc.filter((q) => q.correct_answers.length === q.options.length).length,
     options,
     correctOptions,
-    green: GREEN_MARKERS.map((m) => statFor(m, mc, lang, false)),
-    red: RED_MARKERS.map((m) => statFor(m, mc, lang, true)),
+    green: statsFor(GREEN_MARKERS, mc, lang, false),
+    red: statsFor(RED_MARKERS, mc, lang, true),
   };
 }
 
@@ -109,11 +129,7 @@ export function markerStrategyScore(questions: DrivingQuestion[], lang: Language
   for (const q of mc) {
     const correct = new Set(q.correct_answers.map((c) => c.letter));
     const allRight = q.options.every((o) => {
-      const tick = GREEN_MARKERS.some((m) => m.re[lang].test(o.text))
-        ? true
-        : RED_MARKERS.some((m) => m.re[lang].test(o.text))
-        ? false
-        : true;
+      const tick = matches(GREEN_MARKERS, o.text, lang) ? true : matches(RED_MARKERS, o.text, lang) ? false : true;
       return tick === correct.has(o.letter);
     });
     if (allRight) right++;
