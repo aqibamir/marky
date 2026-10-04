@@ -36,7 +36,7 @@ for (const name of ["drivingQuestions", "catalogNames.generated", "classBExclusi
 }
 const dq = await import(pathToFileURL(path.join(tmp, "drivingQuestions.mjs")).href);
 const { STUDY_GUIDE, parseEvidence } = await import(pathToFileURL(path.join(tmp, "studyGuide.mjs")).href);
-const { NUMBER_TOPICS, FORMULA_CHECKS, isNumberQuestion, TYPED_ANSWER_UNITS, factsFor } = await import(pathToFileURL(path.join(tmp, "numberFacts.mjs")).href);
+const { NUMBER_TOPICS, FORMULA_CHECKS, isNumberQuestion, TYPED_ANSWER_UNITS, factsFor, inNumbersSheet } = await import(pathToFileURL(path.join(tmp, "numberFacts.mjs")).href);
 
 const [de, en] = await Promise.all([dq.getAllQuestions("de"), dq.getAllQuestions("en")]);
 const byId = new Map();
@@ -108,6 +108,14 @@ for (const id of typedIds) {
   if (factsFor(id).length === 0) failures.push(`[test] ${id} has no explaining fact`);
 }
 for (const id of Object.keys(TYPED_ANSWER_UNITS)) if (!typedIds.has(id)) failures.push(`[units] ${id} is not a Class B type-in question`);
+// Multiple-choice part of the test: same set in both languages, each with an explanation.
+const mcIds = (list) => new Set(list.filter((q) => classB.has(q.question_id) && q.options.length > 0 && inNumbersSheet(q)).map((q) => q.question_id));
+const mcEn = mcIds(en), mcDe = mcIds(de);
+for (const id of mcEn) {
+  if (!mcDe.has(id)) failures.push(`[test] ${id} is a multiple-choice number question in English but not German`);
+  if (factsFor(id, true).length === 0) failures.push(`[test] ${id} has no explanation`);
+}
+for (const id of mcDe) if (!mcEn.has(id)) failures.push(`[test] ${id} is a multiple-choice number question in German but not English`);
 
 const numbersIn = (t) => (t.match(/\d+(?:[.,]\d+)?/g) ?? []).map((n) => parseFloat(n.replace(",", ".")));
 let formulasOk = 0;
@@ -142,6 +150,6 @@ console.log(
     `${cited.size} of ${classB.size} Class B questions cited as evidence (${Math.round((100 * cited.size) / classB.size)}%).\n` +
     `Numbers sheet: ${numberQuestions.length - notCovered.length}/${numberQuestions.length} number questions covered, ` +
     `${formulasOk}/${FORMULA_CHECKS.length} formula checks reproduce the catalog's answer; ` +
-    `${typedIds.size} type-in questions, each with a unit and an explanation.`
+    `numbers test: ${typedIds.size} type-in (each with a unit) + ${mcEn.size} multiple-choice, all explained.`
 );
 process.exit(failures.length || uncovered.length ? 1 : 0);

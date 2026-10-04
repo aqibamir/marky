@@ -15,7 +15,7 @@ import {
   emergencyBrakingDistance,
   emergencyStoppingDistance,
   followingDistance,
-  isNumberQuestion,
+  inNumbersSheet,
   reactionDistance,
   stoppingDistance,
 } from "@/lib/numberFacts";
@@ -116,7 +116,7 @@ export default function NumbersSheet({ questions, lang }: { questions: DrivingQu
   const numberQuestions = useMemo(
     () =>
       questions
-        .filter((q) => isNumberQuestion(q) || TOPIC_OF.has(q.question_id))
+        .filter(inNumbersSheet)
         .sort((a, b) => compareDotted(a.question_number, b.question_number)),
     [questions]
   );
@@ -151,7 +151,7 @@ export default function NumbersSheet({ questions, lang }: { questions: DrivingQu
       >
         <span>
           <span className="font-semibold">✍️ Test yourself</span>
-          <span className="block text-xs text-muted-foreground">Every type-the-number question, scored, with your mistakes explained.</span>
+          <span className="block text-xs text-muted-foreground">Type-in and multiple-choice number questions, scored, with your mistakes explained.</span>
         </span>
         <span className="text-primary font-semibold shrink-0">Start →</span>
       </Link>

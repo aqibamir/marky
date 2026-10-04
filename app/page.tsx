@@ -51,7 +51,7 @@ export default async function Home() {
               <Link href="/cheatsheet">Browse all questions</Link>
             </Button>
             <Button asChild size="lg" variant="outline">
-              <Link href="/numbers-test">🔢 Type-in test</Link>
+              <Link href="/numbers-test">🔢 Numbers test</Link>
             </Button>
           </div>
 

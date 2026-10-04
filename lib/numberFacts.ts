@@ -401,11 +401,24 @@ export const TYPED_ANSWER_UNITS: Record<string, string> = {
   "2.7.05-108": "mm",
 };
 
-/** The sheet's facts that explain a question (those citing it). */
-export function factsFor(questionId: string): StudyPoint[] {
+/** The sheet's facts (and, with includeTraps, traps) that explain a question - those citing it. */
+export function factsFor(questionId: string, includeTraps = false): StudyPoint[] {
+  const cites = (p: StudyPoint) => p.evidence.some((ev) => ev.split(/[=~]/)[0] === questionId);
   const out: StudyPoint[] = [];
-  for (const t of NUMBER_TOPICS)
-    for (const p of t.facts)
-      if (p.evidence.some((ev) => ev.split(/[=~]/)[0] === questionId)) out.push(p);
+  for (const t of NUMBER_TOPICS) for (const p of t.facts) if (cites(p)) out.push(p);
+  if (includeTraps) for (const t of NUMBER_TOPICS) for (const p of t.traps) if (cites(p)) out.push(p);
   return out;
+}
+
+const CITED_IDS = new Set(
+  NUMBER_TOPICS.flatMap((t) => [...t.facts, ...t.traps]).flatMap((p) => p.evidence.map((ev) => ev.split(/[=~]/)[0]))
+);
+
+/**
+ * Everything the Numbers sheet lists: number questions plus any question a
+ * topic cites (some spell the number out in one language only, see
+ * isNumberQuestion) - so the list is the same in German and English.
+ */
+export function inNumbersSheet(q: RawDrivingQuestion): boolean {
+  return isNumberQuestion(q) || CITED_IDS.has(q.question_id);
 }
